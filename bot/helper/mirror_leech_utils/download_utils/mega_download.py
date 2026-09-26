@@ -198,8 +198,10 @@ def _mega_py_download_sync(listener, path, email, password):
 
             if dest_filename is not None:
                 file_name = dest_filename
-            else:
+            elif isinstance(attribs, dict) and 'n' in attribs:
                 file_name = attribs['n']
+            else:
+                file_name = f"mega_file_{file_handle or 'dl'}"
 
             input_file = requests.get(file_url, stream=True).raw
 
