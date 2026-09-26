@@ -312,12 +312,18 @@ def arg_parser(items, arg_base):
                             break
                     sub_list.append(items[j])
                 if sub_list:
-                    value = " ".join(sub_list)
-                    if part == "-ff" and not value.strip().startswith("["):
-                        arg_base[part].add(value)
+                    if part == "-ff":
+                        first_item = sub_list[0]
+                        if not first_item.startswith("["):
+                            for s_item in sub_list:
+                                arg_base[part].add(s_item)
+                            i += len(sub_list)
+                        else:
+                            arg_base[part] = " ".join(sub_list)
+                            i += len(sub_list)
                     else:
-                        arg_base[part] = value
-                    i += len(sub_list)
+                        arg_base[part] = " ".join(sub_list)
+                        i += len(sub_list)
 
         i += 1
 

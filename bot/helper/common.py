@@ -462,35 +462,81 @@ class TaskConfig:
             gc_used = False
 
         enable_ffc = self.user_dict.get("ENABLE_FFMPEG_CMDS") if "ENABLE_FFMPEG_CMDS" in self.user_dict else Config.ENABLE_FFMPEG_CMDS
+        user_ff = self.user_dict.get("FFMPEG_CMDS") or {}
+        global_ff = Config.FFMPEG_CMDS or {}
+        ffmpeg_dict = {**global_ff, **user_ff} if isinstance(user_ff, dict) and isinstance(global_ff, dict) else (user_ff or global_ff or {})
+
+        DEFAULT_BLOCKED_FFMPEG = {
+            "compress": [
+                "-i mltb.video -c:v libx264 -crf 28 -preset medium -c:a aac -b:a 128k mltb -del"
+            ],
+            "encode": [
+                "-i mltb.video -c:v libx265 -crf 28 -preset medium -c:a aac -b:a 128k mltb -del"
+            ],
+            "watermark": [
+                "-i mltb.video -vf \"drawtext=text='anizoneflix':fontcolor=red:fontsize=48:x=w-tw-20:y=20\" -map 0:v -map 0:a? -c:v libx264 -c:a copy mltb -del"
+            ]
+        }
+        for b_key, b_cmd in DEFAULT_BLOCKED_FFMPEG.items():
+            if b_key not in ffmpeg_dict:
+                ffmpeg_dict[b_key] = b_cmd
+
         if not enable_ffc:
             self.ffmpeg_cmds = None
-        elif self.ffmpeg_cmds is not None:
+
+        if enable_ffc and self.ffmpeg_cmds is not None:
             raw_input = self.ffmpeg_cmds if isinstance(self.ffmpeg_cmds, (list, set, tuple)) else [self.ffmpeg_cmds]
             keys = []
+            custom_cmd_strings = []
             for item in raw_input:
                 if isinstance(item, str):
-                    for sub_k in item.split(","):
-                        if sub_k.strip():
-                            keys.append(sub_k.strip().lower())
+                    if item.strip().startswith("-i "):
+                        custom_cmd_strings.append(item.strip())
+                    else:
+                        for sub_k in item.split(","):
+                            if sub_k.strip():
+                                keys.append(sub_k.strip().lower())
                 else:
                     keys.append(str(item).strip().lower())
 
-            user_ff = self.user_dict.get("FFMPEG_CMDS") or {}
-            global_ff = Config.FFMPEG_CMDS or {}
-            ffmpeg_dict = {**global_ff, **user_ff} if isinstance(user_ff, dict) and isinstance(global_ff, dict) else (user_ff or global_ff or {})
             valid = {
                 str(key).lower(): (cmds if isinstance(cmds, (list, tuple)) else [cmds])
                 for key, cmds in ffmpeg_dict.items()
             } if isinstance(ffmpeg_dict, dict) else {}
 
-            if missing := [key for key in keys if key not in valid]:
+            enc_enabled = Config.ENABLE_ENCODE and (self.user_dict.get("ENABLE_ENCODE") if "ENABLE_ENCODE" in self.user_dict else True)
+            com_enabled = Config.ENABLE_COMPRESS and (self.user_dict.get("ENABLE_COMPRESS") if "ENABLE_COMPRESS" in self.user_dict else True)
+            wm_enabled = Config.ENABLE_WATERMARK and (self.user_dict.get("ENABLE_WATERMARK") if "ENABLE_WATERMARK" in self.user_dict else True)
+
+            allowed_keys = []
+            blocked_keys = []
+            for k in keys:
+                if k == "encode" and not enc_enabled:
+                    blocked_keys.append(k)
+                elif k == "compress" and not com_enabled:
+                    blocked_keys.append(k)
+                elif k == "watermark" and not wm_enabled:
+                    blocked_keys.append(k)
+                else:
+                    allowed_keys.append(k)
+
+            if blocked_keys:
+                await send_message(
+                    self.message,
+                    f"FFmpeg feature option(s) disabled: {', '.join(blocked_keys)}.",
+                )
+
+            if missing := [key for key in allowed_keys if key not in valid]:
                 await send_message(
                     self.message,
                     f"Unknown FFmpeg Cmds key(s): {', '.join(map(str, missing))}. Check FF Media Settings in /bsetting.",
                 )
-            self.ffmpeg_cmds = [
-                value for key in keys if key in valid for value in valid[key]
-            ] or None
+
+            resolved_cmds = [
+                value for key in allowed_keys if key in valid for value in valid[key]
+            ]
+            resolved_cmds.extend(custom_cmd_strings)
+            self.ffmpeg_cmds = resolved_cmds or None
 
             user_dump = self.user_dict.get("FFMPEG_DUMP") or {}
             global_dump = Config.FFMPEG_DUMP or {}

@@ -1365,9 +1365,16 @@ Configure custom video encoding, compression, and watermark overlays for uploads
             "DUMP", f"userset {user_id} menu FFMPEG_DUMP", "header"
         )
 
-        avail_keys = list(Config.FFMPEG_CMDS.keys()) if isinstance(Config.FFMPEG_CMDS, dict) else []
+        user_ff = user_dict.get("FFMPEG_CMDS") or {}
+        global_ff = Config.FFMPEG_CMDS or {}
+        merged_ff = {**global_ff, **user_ff} if isinstance(user_ff, dict) and isinstance(global_ff, dict) else (user_ff or global_ff or {})
+        avail_keys = list(merged_ff.keys())
         if avail_keys:
-            ffc_display = "\n" + "\n".join([f"• <code>-ff {escape(str(k))}</code>" for k in avail_keys])
+            lines = []
+            for k in avail_keys:
+                source_tag = " (User)" if k in user_ff else " (Global)"
+                lines.append(f"• <code>-ff {escape(str(k))}</code>{source_tag}")
+            ffc_display = "\n" + "\n".join(lines)
         else:
             ffc_display = "<b>None Configured</b>"
 
@@ -1652,7 +1659,19 @@ async def add_file(_, message, ftype, rfunc, target_user_id=None):
 
 
 def validate_ffmpeg_cmds(value):
-    for key, cmds in value.items():
+    if not isinstance(value, dict):
+        raise ValueError("Input must be a Python dictionary!")
+    for key, cmds in list(value.items()):
+        k_lower = key.strip().lower()
+        if k_lower == "watermark" and not Config.ENABLE_WATERMARK:
+            raise ValueError("Watermark command option is blocked/disabled by Bot Owner!")
+        if k_lower == "compress" and not Config.ENABLE_COMPRESS:
+            raise ValueError("Compress command option is blocked/disabled by Bot Owner!")
+        if k_lower == "encode" and not Config.ENABLE_ENCODE:
+            raise ValueError("Encode command option is blocked/disabled by Bot Owner!")
+        if isinstance(cmds, str):
+            cmds = [cmds]
+            value[key] = cmds
         if not isinstance(cmds, (list, tuple)) or not cmds:
             raise ValueError(f"'{key}' must be a non-empty list of command strings")
         for cmd in cmds:
