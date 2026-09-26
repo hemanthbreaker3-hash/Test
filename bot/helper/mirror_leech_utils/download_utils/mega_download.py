@@ -140,6 +140,108 @@ def _mega_py_download_sync(listener, path, email, password):
 
     Mega._parse_url = _patched_parse_url
 
+    if not hasattr(Mega, "_orig_download_file"):
+        from mega.crypto import (
+            base64_to_a32,
+            decrypt_attr,
+            base64_url_decode,
+            a32_to_str,
+            get_chunks,
+            str_to_a32,
+        )
+        from Crypto.Cipher import AES
+        from Crypto.Util import Counter
+        import requests
+        import tempfile
+        import shutil
+        from pathlib import Path
+        import os
+
+        _orig_download_file = Mega._download_file
+
+        def _fixed_download_file(self, file_handle, file_key, dest_path=None, dest_filename=None, is_public=False, file=None):
+            if file is None:
+                if is_public:
+                    file_key = base64_to_a32(file_key)
+                    file_data = self._api_request({'a': 'g', 'g': 1, 'p': file_handle})
+                else:
+                    file_data = self._api_request({'a': 'g', 'g': 1, 'n': file_handle})
+
+                k = (file_key[0] ^ file_key[4], file_key[1] ^ file_key[5],
+                     file_key[2] ^ file_key[6], file_key[3] ^ file_key[7])
+                iv = file_key[4:6] + (0, 0)
+                meta_mac = file_key[6:8]
+            else:
+                file_data = self._api_request({'a': 'g', 'g': 1, 'n': file['h']})
+                k = file['k']
+                iv = file['iv']
+                meta_mac = file['meta_mac']
+
+            if 'g' not in file_data:
+                from mega.errors import RequestError
+                raise RequestError('File not accessible anymore')
+            file_url = file_data['g']
+            file_size = file_data['s']
+            attribs = base64_url_decode(file_data['at'])
+            attribs = decrypt_attr(attribs, k)
+
+            if dest_filename is not None:
+                file_name = dest_filename
+            else:
+                file_name = attribs['n']
+
+            input_file = requests.get(file_url, stream=True).raw
+
+            if dest_path is None:
+                dest_path = ''
+            else:
+                dest_path += '/'
+
+            with tempfile.NamedTemporaryFile(mode='w+b', prefix='megapy_', delete=False) as temp_output_file:
+                k_str = a32_to_str(k)
+                counter = Counter.new(128, initial_value=((iv[0] << 32) + iv[1]) << 64)
+                aes = AES.new(k_str, AES.MODE_CTR, counter=counter)
+
+                mac_str = '\0' * 16
+                mac_encryptor = AES.new(k_str, AES.MODE_CBC, mac_str.encode("utf8"))
+                iv_str = a32_to_str([iv[0], iv[1], iv[0], iv[1]])
+
+                for chunk_start, chunk_size in get_chunks(file_size):
+                    chunk = input_file.read(chunk_size)
+                    chunk = aes.decrypt(chunk)
+                    temp_output_file.write(chunk)
+
+                    encryptor = AES.new(k_str, AES.MODE_CBC, iv_str)
+                    i = 0
+                    for i in range(0, len(chunk) - 16, 16):
+                        block = chunk[i:i + 16]
+                        encryptor.encrypt(block)
+
+                    if file_size > 16:
+                        if len(chunk) > 16:
+                            i += 16
+                        else:
+                            i = 0
+                    else:
+                        i = 0
+
+                    block = chunk[i:i + 16]
+                    if len(block) % 16:
+                        block += b'\0' * (16 - (len(block) % 16))
+                    mac_str = mac_encryptor.encrypt(encryptor.encrypt(block))
+
+                    file_info = os.stat(temp_output_file.name)
+                    LOGGER.info('%s of %s downloaded', file_info.st_size, file_size)
+                file_mac = str_to_a32(mac_str)
+                if (file_mac[0] ^ file_mac[1], file_mac[2] ^ file_mac[3]) != meta_mac:
+                    raise ValueError('Mismatched mac')
+                output_path = Path(dest_path + file_name)
+                shutil.move(temp_output_file.name, output_path)
+                return output_path
+
+        Mega._orig_download_file = _orig_download_file
+        Mega._download_file = _fixed_download_file
+
     m = None
     if email and password:
         try:
