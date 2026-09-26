@@ -461,7 +461,8 @@ class TaskConfig:
         else:
             gc_used = False
 
-        if not Config.ENABLE_FFMPEG_CMDS:
+        enable_ffc = self.user_dict.get("ENABLE_FFMPEG_CMDS") if "ENABLE_FFMPEG_CMDS" in self.user_dict else Config.ENABLE_FFMPEG_CMDS
+        if not enable_ffc:
             self.ffmpeg_cmds = None
         elif self.ffmpeg_cmds is not None:
             raw_input = self.ffmpeg_cmds if isinstance(self.ffmpeg_cmds, (list, set, tuple)) else [self.ffmpeg_cmds]
@@ -474,7 +475,9 @@ class TaskConfig:
                 else:
                     keys.append(str(item).strip().lower())
 
-            ffmpeg_dict = Config.FFMPEG_CMDS or {}
+            user_ff = self.user_dict.get("FFMPEG_CMDS") or {}
+            global_ff = Config.FFMPEG_CMDS or {}
+            ffmpeg_dict = {**global_ff, **user_ff} if isinstance(user_ff, dict) and isinstance(global_ff, dict) else (user_ff or global_ff or {})
             valid = {
                 str(key).lower(): (cmds if isinstance(cmds, (list, tuple)) else [cmds])
                 for key, cmds in ffmpeg_dict.items()
