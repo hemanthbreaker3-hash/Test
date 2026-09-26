@@ -167,6 +167,9 @@ def _mega_py_download_sync(listener, path, email, password):
                 else:
                     file_data = self._api_request({'a': 'g', 'g': 1, 'n': file_handle})
 
+                if len(file_key) < 8:
+                    file_key = tuple(file_key) + (0,) * (8 - len(file_key))
+
                 k = (file_key[0] ^ file_key[4], file_key[1] ^ file_key[5],
                      file_key[2] ^ file_key[6], file_key[3] ^ file_key[7])
                 iv = file_key[4:6] + (0, 0)
