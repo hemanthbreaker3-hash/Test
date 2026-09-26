@@ -393,6 +393,11 @@ user_settings_text = {
         "Color for text watermark.",
         "<blockquote>Send text watermark color name or hex code (e.g. white, yellow, #FF0000).\n⏱️ <b>Time Left:</b> <code>60 sec</code></blockquote>",
     ),
+    "WM_SIZE": (
+        "Number / Width Dimension",
+        "Font size for text watermark or width for image watermark.",
+        "<blockquote>Send Font Size (e.g. 24, 30) or Image Width (e.g. 150, 200).\n⏱️ <b>Time Left:</b> <code>60 sec</code></blockquote>",
+    ),
 }
 
 
@@ -800,11 +805,13 @@ Configure custom video encoding, compression, and watermark overlays for uploads
         buttons.data_button("Username", f"userset {user_id} menu WM_USERNAME")
         buttons.data_button("Text", f"userset {user_id} menu WM_TEXT")
         buttons.data_button("Photo / Image URL", f"userset {user_id} menu WM_IMAGE")
+        buttons.data_button("Size / Scale", f"userset {user_id} menu WM_SIZE")
         buttons.data_button("🎨 Text Color", f"userset {user_id} wm_color_select", position="header")
 
         wm_user = user_dict.get("WM_USERNAME")
         wm_text = user_dict.get("WM_TEXT")
         wm_img = user_dict.get("WM_IMAGE")
+        wm_size = user_dict.get("WM_SIZE", "Default")
         wm_color = user_dict.get("WM_COLOR", "white")
         wm_pos = user_dict.get("WM_POSITION", "Top-Left")
 
@@ -828,6 +835,7 @@ Configure custom video encoding, compression, and watermark overlays for uploads
 • <b>Username:</b> <code>{escape(str(wm_user or 'Not Set'))}</code>
 • <b>Text:</b> <code>{escape(str(wm_text or 'Not Set'))}</code>
 • <b>Photo/Image URL:</b> <code>{escape(str(wm_img or 'Not Set'))}</code>
+• <b>Size / Scale:</b> <code>{escape(str(wm_size))}</code>
 • <b>Text Color:</b> <code>{escape(str(wm_color))}</code>
 • <b>Selected Position:</b> <b>{escape(str(wm_pos))}</b></blockquote>"""
 

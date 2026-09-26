@@ -1106,7 +1106,7 @@ class FFMpeg:
             await remove(output)
         return False
 
-    async def apply_watermark(self, video_file, text="", image_path="", position="Top-Left", color="white"):
+    async def apply_watermark(self, video_file, text="", image_path="", position="Top-Left", color="white", size=""):
         cores, threads = ffmpeg_layout()
         self.clear()
         self._total_time = (await get_media_info(video_file))[0]
@@ -1139,7 +1139,14 @@ class FFMpeg:
 
         if image_path and await aiopath.exists(image_path):
             overlay_pos = pos_map_img.get(position, "10:10")
-            filter_str = f"[0:v][1:v]overlay={overlay_pos}[outv]"
+            if size and str(size).strip().isdigit():
+                scale_w = int(str(size).strip())
+                filter_str = f"[1:v]scale={scale_w}:-1[wm];[0:v][wm]overlay={overlay_pos}[outv]"
+            elif size and "x" in str(size).lower():
+                scale_dim = str(size).strip().lower().replace("x", ":")
+                filter_str = f"[1:v]scale={scale_dim}[wm];[0:v][wm]overlay={overlay_pos}[outv]"
+            else:
+                filter_str = f"[0:v][1:v]overlay={overlay_pos}[outv]"
             cmd = [
                 "taskset", "-c", f"{cores}", BinConfig.FFMPEG_NAME,
                 "-hide_banner", "-loglevel", "error", "-progress", "pipe:1",
@@ -1153,7 +1160,8 @@ class FFMpeg:
             escaped_text = text.replace(":", r"\:").replace("'", r"'\''")
             text_pos = pos_map_text.get(position, "x=10:y=10")
             font_color = color or "white"
-            vf = f"drawtext=text='{escaped_text}':fontcolor={font_color}:fontsize=24:{text_pos}"
+            font_size = str(size).strip() if size and str(size).strip().isdigit() else "24"
+            vf = f"drawtext=text='{escaped_text}':fontcolor={font_color}:fontsize={font_size}:{text_pos}"
             cmd = [
                 "taskset", "-c", f"{cores}", BinConfig.FFMPEG_NAME,
                 "-hide_banner", "-loglevel", "error", "-progress", "pipe:1",
