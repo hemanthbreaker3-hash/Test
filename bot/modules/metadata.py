@@ -28,15 +28,17 @@ async def apply_metadata_title(
     audio_metadata_dict=None,
     video_metadata_dict=None,
     subtitle_metadata_dict=None,
+    strip_metadata=False,
 ):
-    if not any(
+    has_custom_meta = any(
         [
             metadata_dict,
             audio_metadata_dict,
             video_metadata_dict,
             subtitle_metadata_dict,
         ]
-    ):
+    )
+    if not strip_metadata and not has_custom_meta:
         return dl_path
 
     LOGGER.info(f"Applying metadata to {self.name}")
@@ -104,7 +106,7 @@ async def apply_metadata_title(
                 maps += ["-map", f"0:{idx}"]
                 if typ == "video":
                     maps += [f"-c:v:{v}", "copy"]
-                    if "tags" in stream and "language" in stream["tags"]:
+                    if has_custom_meta and "tags" in stream and "language" in stream["tags"]:
                         meta_maps += [
                             f"-metadata:s:v:{v}",
                             f"language={stream['tags']['language']}",
@@ -114,7 +116,7 @@ async def apply_metadata_title(
                     v += 1
                 elif typ == "audio":
                     maps += [f"-c:a:{a}", "copy"]
-                    if "tags" in stream and "language" in stream["tags"]:
+                    if has_custom_meta and "tags" in stream and "language" in stream["tags"]:
                         meta_maps += [
                             f"-metadata:s:a:{a}",
                             f"language={stream['tags']['language']}",
@@ -132,7 +134,7 @@ async def apply_metadata_title(
                     a += 1
                 elif typ == "subtitle":
                     maps += [f"-c:s:{s}", "copy"]
-                    if "tags" in stream and "language" in stream["tags"]:
+                    if has_custom_meta and "tags" in stream and "language" in stream["tags"]:
                         meta_maps += [
                             f"-metadata:s:s:{s}",
                             f"language={stream['tags']['language']}",
@@ -152,7 +154,18 @@ async def apply_metadata_title(
                     maps += [f"-c:{idx}", "copy"]
 
             met_cmd += maps
-            met_cmd += ["-map_metadata", "-1"]
+            met_cmd += [
+                "-map_metadata",
+                "-1",
+                "-map_metadata:s",
+                "-1",
+                "-map_metadata:g",
+                "-1",
+                "-map_chapters",
+                "-1",
+            ]
+            if strip_metadata and not has_custom_meta:
+                met_cmd += ["-fflags", "+bitexact", "-flags:v", "+bitexact", "-flags:a", "+bitexact"]
             for item in meta_maps:
                 met_cmd.append(item)
             for k, v_ in meta["global"].items():

@@ -372,11 +372,17 @@ class TaskListener(TaskConfig):
             self.size = await get_path_size(up_dir)
             self.clear()
 
-        if (
-            (hasattr(self, "metadata_dict") and self.metadata_dict)
-            or (hasattr(self, "audio_metadata_dict") and self.audio_metadata_dict)
-            or (hasattr(self, "video_metadata_dict") and self.video_metadata_dict)
-        ):
+        has_meta_dicts = any(
+            [
+                (hasattr(self, "metadata_dict") and self.metadata_dict),
+                (hasattr(self, "audio_metadata_dict") and self.audio_metadata_dict),
+                (hasattr(self, "video_metadata_dict") and self.video_metadata_dict),
+                (hasattr(self, "subtitle_metadata_dict") and self.subtitle_metadata_dict),
+            ]
+        )
+        strip_meta = self.user_dict.get("STRIP_METADATA_ENABLE", False) or getattr(Config, "STRIP_METADATA_ENABLE", False)
+
+        if has_meta_dicts or strip_meta:
             up_path = await apply_metadata_title(
                 self,
                 up_path,
@@ -384,6 +390,8 @@ class TaskListener(TaskConfig):
                 getattr(self, "metadata_dict", {}),
                 getattr(self, "audio_metadata_dict", {}),
                 getattr(self, "video_metadata_dict", {}),
+                getattr(self, "subtitle_metadata_dict", {}),
+                strip_metadata=strip_meta,
             )
             if self.is_cancelled:
                 return

@@ -1392,6 +1392,12 @@ Configure custom video encoding, compression, and watermark overlays for uploads
             f"userset {user_id} tog SET_ALL_METADATA_ENABLE {'f' if set_all_enabled else 't'}",
         )
 
+        strip_meta_enabled = user_dict.get("STRIP_METADATA_ENABLE", False)
+        buttons.data_button(
+            f"Strip Metadata: {'ON' if strip_meta_enabled else 'OFF'}",
+            f"userset {user_id} tog STRIP_METADATA_ENABLE {'f' if strip_meta_enabled else 't'}",
+        )
+
         set_all_meta_setting = user_dict.get("SET_ALL_METADATA")
         display_set_all_meta = "<b>Not Set</b>"
         if isinstance(set_all_meta_setting, dict) and set_all_meta_setting:
@@ -1451,12 +1457,14 @@ Configure custom video encoding, compression, and watermark overlays for uploads
         btns = buttons.build_menu(2)
 
         set_all_status = "Enabled" if set_all_enabled else "Disabled"
+        strip_meta_status = "Enabled" if strip_meta_enabled else "Disabled"
         text = f"""<b>🎞️ FFmpeg & Media Metadata Settings</b>
 
 <blockquote>• <b>User:</b> {user_name}
 • <b>Available FFmpeg Flags:</b> {ffc_display}
 • <b>Configured Key DUMP Destinations:</b> {dump_display}
 • <b>Global Metadata Override:</b> <b>{set_all_status}</b>
+• <b>Strip Metadata:</b> <b>{strip_meta_status}</b>
 • <b>Global Metadata:</b> {display_set_all_meta}
 • <b>Default Metadata:</b> {display_meta_val if not set_all_enabled else '(Disabled)'}
 • <b>Audio Metadata:</b> {display_audio_meta if not set_all_enabled else '(Disabled)'}
@@ -2358,7 +2366,7 @@ async def edit_user_settings(client, query):
                 back_to = "seedr"
             elif data[3] in ["AUTO_MERGE", "SAVE_FILES"]:
                 back_to = "vtools"
-            elif data[3] == "SET_ALL_METADATA_ENABLE":
+            elif data[3] in ["SET_ALL_METADATA_ENABLE", "STRIP_METADATA_ENABLE"]:
                 back_to = "ffset"
             elif data[3] == "ENABLE_ENCODE":
                 back_to = "encode_menu"
