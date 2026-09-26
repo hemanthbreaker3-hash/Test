@@ -443,7 +443,7 @@ class Mirror(TaskListener):
                 await delete_links(self.message)
                 return
 
-        if isinstance(reply_to, list):
+        if isinstance(reply_to, list) and len(reply_to) > 0 and isinstance(reply_to[0], str):
             self.bulk = reply_to
             b_msg = input_list[:1]
             self.options = " ".join(input_list[1:])
@@ -475,7 +475,10 @@ class Mirror(TaskListener):
         if not reply_to:
             reply_to = self.message
 
-        if reply_to:
+        if isinstance(reply_to, list):
+            file_ = "tg_range"
+            self.file_details = {"caption": reply_to[0].caption if reply_to and hasattr(reply_to[0], "caption") else ""}
+        elif reply_to:
             file_ = (
                 reply_to.document
                 or reply_to.photo
@@ -656,7 +659,11 @@ class Mirror(TaskListener):
                     await delete_links(self.message)
                     return
 
-        if file_ is not None:
+        if isinstance(reply_to, list):
+            await TelegramDownloadHelper(self).add_range_download(
+                reply_to, f"{path}/", session
+            )
+        elif file_ is not None:
             await TelegramDownloadHelper(self).add_download(
                 reply_to, f"{path}/", session
             )

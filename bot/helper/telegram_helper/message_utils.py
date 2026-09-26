@@ -289,9 +289,7 @@ async def delete_status():
                 LOGGER.error(str(e))
 
 
-async def get_tg_link_message(link):
-    message = None
-    links = []
+def _parse_single_tg_link(link: str):
     if link.startswith(
         (
             "https://t.me/",
@@ -310,57 +308,102 @@ async def get_tg_link_message(link):
         msg = re_match(
             r"tg:\/\/(openmessage)\?user_id=([0-9]+)&message_id=([0-9-]+)", link
         )
-        if not TgClient.user:
-            raise TgLinkException("USER_SESSION_STRING required for this private link!")
+
+    if not msg:
+        raise TgLinkException(f"Invalid Telegram link: {link}")
 
     chat = msg[2]
     msg_id = msg[3]
+
     if "-" in msg_id:
-        start_id, end_id = msg_id.split("-")
-        msg_id = start_id = int(start_id)
-        end_id = int(end_id)
-        btw = end_id - start_id
-        if private:
-            link = link.split("&message_id=")[0]
-            links.append(f"{link}&message_id={start_id}")
-            for _ in range(btw):
-                start_id += 1
-                links.append(f"{link}&message_id={start_id}")
+        parts = msg_id.split("-")
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            start_id, end_id = int(parts[0]), int(parts[1])
+            if start_id <= end_id:
+                msg_ids = list(range(start_id, end_id + 1))
+            else:
+                msg_ids = list(range(start_id, end_id - 1, -1))
         else:
-            link = link.rsplit("/", 1)[0]
-            links.append(f"{link}/{start_id}")
-            for _ in range(btw):
-                start_id += 1
-                links.append(f"{link}/{start_id}")
+            raise TgLinkException(f"Invalid Telegram range link: {link}")
     else:
-        msg_id = int(msg_id)
+        if msg_id.isdigit():
+            msg_ids = int(msg_id)
+        else:
+            raise TgLinkException(f"Invalid Telegram message ID in link: {link}")
 
     if chat.isdigit():
         chat = int(chat) if private else int(f"-100{chat}")
 
+    return chat, msg_ids, private
+
+
+def parse_tg_link(link: str):
+    from re import findall as re_findall
+    link = link.strip()
+    urls = re_findall(
+        r"(?:https?:\/\/(?:t\.me|telegram\.me|telegram\.dog|telegram\.space)\/(?:c\/)?[^\/\s]+\/(?:[^\/\s]+\/)?[0-9]+|tg:\/\/openmessage\?[^\s]+)",
+        link,
+    )
+    if len(urls) >= 2:
+        chat1, id1, priv1 = _parse_single_tg_link(urls[0])
+        chat2, id2, priv2 = _parse_single_tg_link(urls[1])
+        if chat1 != chat2:
+            raise TgLinkException("Chat ID mismatch in range links!")
+        start_id = id1[0] if isinstance(id1, list) else id1
+        end_id = id2[0] if isinstance(id2, list) else id2
+        if start_id <= end_id:
+            msg_ids = list(range(start_id, end_id + 1))
+        else:
+            msg_ids = list(range(start_id, end_id - 1, -1))
+        return chat1, msg_ids, priv1 or priv2
+
+    return _parse_single_tg_link(link)
+
+
+async def get_tg_link_message(link):
+    chat, msg_ids, private = parse_tg_link(link)
+    if private and not TgClient.user:
+        raise TgLinkException("USER_SESSION_STRING required for this private link!")
+
+    is_range = isinstance(msg_ids, list)
+
     if not private:
         try:
-            message = await TgClient.bot.get_messages(chat_id=chat, message_ids=msg_id)
-            if message.empty:
+            messages = await TgClient.bot.get_messages(chat_id=chat, message_ids=msg_ids)
+            if is_range:
+                if not isinstance(messages, list):
+                    messages = [messages]
+                valid_msgs = [m for m in messages if m and not getattr(m, "empty", False)]
+                if valid_msgs:
+                    return valid_msgs, "bot"
+                private = True
+            else:
+                if messages and not getattr(messages, "empty", False):
+                    return messages, "bot"
                 private = True
         except Exception as e:
             private = True
             if not TgClient.user:
                 raise e
 
-    if not private:
-        return (links, "bot") if links else (message, "bot")
-    elif TgClient.user:
+    if TgClient.user:
         try:
-            user_message = await TgClient.user.get_messages(
-                chat_id=chat, message_ids=msg_id
-            )
+            user_messages = await TgClient.user.get_messages(chat_id=chat, message_ids=msg_ids)
+            if is_range:
+                if not isinstance(user_messages, list):
+                    user_messages = [user_messages]
+                valid_msgs = [m for m in user_messages if m and not getattr(m, "empty", False)]
+                if valid_msgs:
+                    return valid_msgs, "user"
+                raise TgLinkException("No valid messages found in the specified range!")
+            else:
+                if user_messages and not getattr(user_messages, "empty", False):
+                    return user_messages, "user"
+                raise TgLinkException("Message not found or empty!")
         except Exception as e:
             raise TgLinkException(
                 f"You don't have access to this chat!. ERROR: {e}"
             ) from e
-        if not user_message.empty:
-            return (links, "user") if links else (user_message, "user")
     else:
         raise TgLinkException("Private: Please report!")
 

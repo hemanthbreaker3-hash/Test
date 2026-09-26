@@ -129,11 +129,10 @@ class TelegramDownloadHelper:
             GLOBAL_GID.pop(self._id)
         return
 
-    async def _download(self, message, path):
+    async def _download_file(self, message, path):
         try:
             if dir_path := ospath.dirname(path):
                 await makedirs(dir_path, exist_ok=True)
-            # TODO : Add support for user session ( Huh ??)
             if self._hyper_dl:
                 try:
                     self._hyper_dl_instance = HypertgDownload(self)
@@ -177,17 +176,19 @@ class TelegramDownloadHelper:
                     file_name=path, progress=self._on_download_progress
                 )
             if self._listener.is_cancelled:
-                return
+                return False
+            return download is not None
         except (FloodWait, FloodPremiumWait) as f:
             LOGGER.warning(str(f))
             await sleep(f.value)
-            await self._download(message, path)
-            return
+            return await self._download_file(message, path)
         except Exception as e:
             LOGGER.error(str(e), exc_info=True)
-            await self._on_download_error(str(e))
-            return
-        if download is not None:
+            return False
+
+    async def _download(self, message, path):
+        success = await self._download_file(message, path)
+        if success:
             await self._on_download_complete()
         elif not self._listener.is_cancelled:
             await self._on_download_error("Internal error occurred")
@@ -286,6 +287,128 @@ class TelegramDownloadHelper:
             await self._on_download_error(
                 "No document in the replied message! Use SuperGroup incase you are trying to download with User session!"
             )
+
+    async def add_range_download(self, messages, path, session):
+        self.session = session or "bot"
+        if not self._listener.name:
+            self._listener.name = f"Telegram_Range_{self._listener.mid}"
+
+        total_size = 0
+        for msg in messages:
+            if msg.media:
+                media = getattr(msg, msg.media.value, None)
+                if media and hasattr(media, "file_size") and media.file_size:
+                    total_size += media.file_size
+        self._listener.size = total_size
+
+        gid = token_hex(5)
+        add_to_queue, event = await check_running_tasks(self._listener)
+        if add_to_queue:
+            LOGGER.info(f"Added to Queue/Download: {self._listener.name}")
+            async with task_dict_lock:
+                task_dict[self._listener.mid] = QueueStatus(
+                    self._listener, gid, "dl"
+                )
+            await self._listener.on_download_start()
+            if self._listener.multi <= 1:
+                await send_status_message(self._listener.message)
+            await event.wait()
+            if self._listener.is_cancelled:
+                async with global_lock:
+                    if self._id in GLOBAL_GID:
+                        GLOBAL_GID.pop(self._id)
+                return
+
+        self._start_time = time()
+        await self._on_download_start(f"range_{self._listener.mid}", gid, add_to_queue)
+
+        for message in messages:
+            if self._listener.is_cancelled:
+                break
+
+            media = getattr(message, message.media.value) if message.media else None
+            if media is not None:
+                fallback_name = (
+                    media.file_name.rsplit("/", 1)[-1]
+                    if hasattr(media, "file_name") and media.file_name
+                    else f"file_{message.id}"
+                )
+                name_source = self._listener.user_dict.get("NAME_SOURCE", "caption")
+                if name_source == "caption" and message.caption:
+                    file_name = clean_caption_filename(message.caption, fallback_name)
+                else:
+                    file_name = fallback_name
+
+                file_path = ospath.join(path, file_name)
+                await self._download_file(message, file_path)
+
+            msg_text = message.text or message.caption or ""
+            if msg_text:
+                urls = re.findall(r"(?:https?:\/\/|magnet:\?|tg:\/\/)\S+", msg_text)
+                for url in urls:
+                    if self._listener.is_cancelled:
+                        break
+                    url = url.rstrip(".,)]}>\"'")
+                    if not url:
+                        continue
+                    from ...ext_utils.links_utils import (
+                        is_telegram_link,
+                        is_url,
+                        is_magnet,
+                        is_gdrive_link,
+                        is_gdrive_id,
+                        is_mega_link,
+                    )
+                    if is_telegram_link(url):
+                        try:
+                            from ...telegram_helper.message_utils import get_tg_link_message
+                            tg_msg, s_sess = await get_tg_link_message(url)
+                            if isinstance(tg_msg, list):
+                                for tm in tg_msg:
+                                    if tm.media:
+                                        m_obj = getattr(tm, tm.media.value)
+                                        f_name = (
+                                            m_obj.file_name.rsplit("/", 1)[-1]
+                                            if hasattr(m_obj, "file_name") and m_obj.file_name
+                                            else f"file_{tm.id}"
+                                        )
+                                        await self._download_file(tm, ospath.join(path, f_name))
+                            elif tg_msg and tg_msg.media:
+                                m_obj = getattr(tg_msg, tg_msg.media.value)
+                                f_name = (
+                                    m_obj.file_name.rsplit("/", 1)[-1]
+                                    if hasattr(m_obj, "file_name") and m_obj.file_name
+                                    else f"file_{tg_msg.id}"
+                                )
+                                await self._download_file(tg_msg, ospath.join(path, f_name))
+                        except Exception as e:
+                            LOGGER.warning(f"Error fetching nested TG link {url}: {e}")
+                    elif is_url(url) or is_magnet(url):
+                        try:
+                            from ..download_utils.aria2_download import add_aria2_download
+                            from ..download_utils.gd_download import add_gd_download
+                            from ..download_utils.mega_download import add_mega_download
+
+                            if is_gdrive_link(url) or is_gdrive_id(url):
+                                orig_link = self._listener.link
+                                self._listener.link = url
+                                await add_gd_download(self._listener, path)
+                                self._listener.link = orig_link
+                            elif is_mega_link(url):
+                                orig_link = self._listener.link
+                                self._listener.link = url
+                                await add_mega_download(self._listener, path)
+                                self._listener.link = orig_link
+                            else:
+                                orig_link = self._listener.link
+                                self._listener.link = url
+                                await add_aria2_download(self._listener, path, "", None, None)
+                                self._listener.link = orig_link
+                        except Exception as e:
+                            LOGGER.warning(f"Error downloading link {url}: {e}")
+
+        if not self._listener.is_cancelled:
+            await self._on_download_complete()
 
     async def cancel_task(self):
         self._listener.is_cancelled = True
