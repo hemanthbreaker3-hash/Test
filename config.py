@@ -1,10 +1,10 @@
 # Config File for WZ Bot
 
 # Required Variables
-BOT_TOKEN = ""
-OWNER_ID = 0
-TELEGRAM_API = 0
-TELEGRAM_HASH = ""
+BOT_TOKEN = "8834332362:AAEjjydSSmzMij6Y68_0hy6OzsWl59wMPVk"
+OWNER_ID = 8663988850
+TELEGRAM_API = 22266643
+TELEGRAM_HASH = "7d0b85b4146034511b8776ed7ff99de4"
 
 # Optional Configuration
 ALLDEBRID_API_KEY = ""
@@ -21,7 +21,7 @@ BOT_MAX_TASKS = 0
 BOT_PM = False
 CMD_SUFFIX = ""
 DEFAULT_LANG = "en"
-DATABASE_URL = ""
+DATABASE_URL = "mongodb+srv://hemanthbreaker2027:9550399779htr@cluster0.haybbxg.mongodb.net/?appName=Cluster0"
 DEFAULT_UPLOAD = "rc"
 DELETE_LINKS = False
 DEBRID_LINK_API = ""
