@@ -161,8 +161,9 @@ def _mega_py_download_sync(listener, path, email, password):
 
         def _fixed_download_file(self, file_handle, file_key, dest_path=None, dest_filename=None, is_public=False, file=None):
             if file is None:
-                if is_public:
+                if isinstance(file_key, str):
                     file_key = base64_to_a32(file_key)
+                if is_public:
                     file_data = self._api_request({'a': 'g', 'g': 1, 'p': file_handle})
                 else:
                     file_data = self._api_request({'a': 'g', 'g': 1, 'n': file_handle})
@@ -179,6 +180,13 @@ def _mega_py_download_sync(listener, path, email, password):
                 k = file['k']
                 iv = file['iv']
                 meta_mac = file['meta_mac']
+
+            if len(k) < 8:
+                k = tuple(k) + (0,) * (8 - len(k))
+            if len(iv) < 4:
+                iv = tuple(iv) + (0,) * (4 - len(iv))
+            if len(meta_mac) < 2:
+                meta_mac = tuple(meta_mac) + (0,) * (2 - len(meta_mac))
 
             if 'g' not in file_data:
                 from mega.errors import RequestError
