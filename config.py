@@ -1,18 +1,10 @@
 # Config File for WZ Bot
 
-# REQUIRED CONFIG
-BOT_TOKEN = "8834332362:AAGxRq1ClJaJ-lqOLjxUnUUn8TmRrTRAVuE"
-OWNER_ID = 8663988850
-TELEGRAM_API = 22266643
-TELEGRAM_HASH = "7d0b85b4146034511b8776ed7ff99de4"
-# OPTIONAL CONFIG
-TG_PROXY = {}
-USER_SESSION_STRING = ""
-CMD_SUFFIX = ""
-AUTHORIZED_CHATS = ""
-SUDO_USERS = ""
-DATABASE_URL = "mongodb+srv://hemanthbreaker2027:9550399779htr@cluster0.haybbxg.mongodb.net/?appName=Cluster0"
-DATABASE_NAME = "ANNAPRO"
+# Required Variables
+BOT_TOKEN = ""
+OWNER_ID = 0
+TELEGRAM_API = 0
+TELEGRAM_HASH = ""
 
 # Optional Configuration
 ALLDEBRID_API_KEY = ""

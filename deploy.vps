@@ -64,12 +64,11 @@ if [ -f "requirements.txt" ]; then
     pip install --no-deps "mega.py>=1.0.8" -q
 fi
 
-echo "[3/6] Preparing required directories..."
-mkdir -p downloads thumbnails tokens rclone cookies Images
+echo "[3/6] Preparing required directories and script permissions..."
+mkdir -p downloads thumbnails tokens rclone cookies Images configs/sabnzbd
+chmod +x start.sh setpkgs.sh tunnel.sh cron_boot.py 2>/dev/null || true
 
 echo "[4/6] Configuring systemd service..."
-PYTHON_EXEC="$APP_DIR/venv/bin/python3"
-
 cat <<EOF > /etc/systemd/system/${SERVICE_NAME}.service
 [Unit]
 Description=WZML Mirror Leech Bot Service
@@ -81,10 +80,11 @@ StartLimitBurst=5
 Type=simple
 User=root
 WorkingDirectory=$APP_DIR
-ExecStart=$PYTHON_EXEC -m bot
+ExecStart=/bin/bash $APP_DIR/start.sh
 Restart=always
 RestartSec=5
-Environment=PYTHONUNBUFFERED=1
+Environment="PATH=$APP_DIR/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="PYTHONUNBUFFERED=1"
 
 [Install]
 WantedBy=multi-user.target
