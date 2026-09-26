@@ -1814,7 +1814,47 @@ async def set_option(_, message, option, rfunc, target_user_id=None):
             await send_message(message, "Format must be KEY: DUMP_DEST or a dict {'KEY': 'DUMP_DEST'}")
             return
         value = user_dump
-    elif option in ["UPLOAD_PATHS", "FFMPEG_CMDS", "YT_DLP_OPTIONS", "DRIVE_CAT"]:
+    elif option == "FFMPEG_CMDS":
+        user_ff = user_data.get(user_id, {}).get("FFMPEG_CMDS", {})
+        if not isinstance(user_ff, dict):
+            user_ff = {}
+        if value.startswith("{") and value.endswith("}"):
+            try:
+                parsed = literal_eval(value)
+                if not isinstance(parsed, dict):
+                    raise ValueError("Expected a dict")
+                validate_ffmpeg_cmds(parsed)
+                for k, cmds in parsed.items():
+                    user_ff[k.lower().strip()] = cmds if isinstance(cmds, list) else [cmds]
+            except Exception as e:
+                await send_message(message, f"Invalid dict format: {e}")
+                return
+        elif ":" in value:
+            parsed = {}
+            for line in value.split("\n"):
+                if ":" in line:
+                    parts = line.split(":", 1)
+                    k = parts[0].strip().lower()
+                    cmd = parts[1].strip()
+                    if k and cmd:
+                        if k not in parsed:
+                            parsed[k] = []
+                        parsed[k].append(cmd)
+            if parsed:
+                try:
+                    validate_ffmpeg_cmds(parsed)
+                    user_ff.update(parsed)
+                except Exception as e:
+                    await send_message(message, f"Invalid command: {e}")
+                    return
+            else:
+                await send_message(message, "Invalid format! Format must be 'KEY: command' or a Python dict")
+                return
+        else:
+            await send_message(message, "Format must be 'KEY: command' or a dict {'KEY': ['cmd']}")
+            return
+        value = user_ff
+    elif option in ["UPLOAD_PATHS", "YT_DLP_OPTIONS", "DRIVE_CAT"]:
         if value.startswith("{") and value.endswith("}"):
             try:
                 value = literal_eval(sub(r"\s+", " ", value))
@@ -1832,8 +1872,6 @@ async def set_option(_, message, option, rfunc, target_user_id=None):
                         ilink = parts[1].strip() if len(parts) > 1 else ""
                         parsed[k.strip()] = {"drive_id": did, "index_link": ilink}
                     value = parsed
-                elif option == "FFMPEG_CMDS":
-                    validate_ffmpeg_cmds(value)
             except Exception as e:
                 await send_message(message, str(e))
                 return
@@ -1864,7 +1902,13 @@ async def get_menu(option, message, user_id, start=0):
         key = "file"
     else:
         key = "set"
-    if option != "FFMPEG_CMDS":
+    if option == "FFMPEG_CMDS":
+        buttons.data_button("Add/Edit Preset", f"userset {user_id} set FFMPEG_CMDS", "header")
+        buttons.data_button("Add Multiple Presets", f"userset {user_id} addone FFMPEG_CMDS", "header")
+        if user_dict.get("FFMPEG_CMDS", False):
+            buttons.data_button("Delete Specific Preset", f"userset {user_id} rmone FFMPEG_CMDS")
+            buttons.data_button("Reset All Presets", f"userset {user_id} reset FFMPEG_CMDS")
+    else:
         if option == "WM_IMAGE":
             buttons.data_button("Set Image URL / Text", f"userset {user_id} set WM_IMAGE")
         buttons.data_button(
@@ -1890,13 +1934,18 @@ async def get_menu(option, message, user_id, start=0):
                 buttons.data_button("Remove", f"userset {user_id} remove {option}")
 
     if option == "FFMPEG_CMDS":
-        avail_keys = list(Config.FFMPEG_CMDS.keys()) if isinstance(Config.FFMPEG_CMDS, dict) else []
+        user_ff = user_dict.get("FFMPEG_CMDS") or {}
+        global_ff = Config.FFMPEG_CMDS or {}
+        merged_ff = {**global_ff, **user_ff} if isinstance(global_ff, dict) else dict(user_ff)
+        avail_keys = list(merged_ff.keys())
         if avail_keys:
             page_items = avail_keys[start : start + 5]
-            lines = [
-                f"{idx + 1}. • <code>-ff {escape(str(k))}</code>"
-                for idx, k in enumerate(page_items, start=start)
-            ]
+            lines = []
+            for idx, k in enumerate(page_items, start=start):
+                source_tag = " (User)" if k in user_ff else " (Global)"
+                cmds = merged_ff[k]
+                cmds_str = ", ".join(cmds) if isinstance(cmds, list) else str(cmds)
+                lines.append(f"{idx + 1}. • <code>-ff {escape(str(k))}</code>{source_tag}: <code>{escape(cmds_str)}</code>")
             val = "\n" + "\n".join(lines)
             if len(avail_keys) > 5:
                 for x in range(0, len(avail_keys), 5):
@@ -1904,7 +1953,7 @@ async def get_menu(option, message, user_id, start=0):
                         f"{int(x / 5) + 1}", f"userset {user_id} ffpage {x}", position="footer"
                     )
         else:
-            val = "<b>No commands configured by Bot Owner/Sudo.</b>"
+            val = "<b>No commands configured.</b>"
 
     if option in leech_options:
         back_to = "leech"

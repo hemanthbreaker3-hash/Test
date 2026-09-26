@@ -116,6 +116,10 @@ BOOL_VARS = [
     "DISABLE_YTDLP",
     "DISABLE_MEGA",
     "DISABLE_PLUGINS",
+    "ENABLE_ENCODE",
+    "ENABLE_COMPRESS",
+    "ENABLE_WATERMARK",
+    "ENABLE_FFMPEG_CMDS",
     "ENABLE_TELEMETRY",
     "EQUAL_SPLITS",
     "GOFILE_AUTO_CREATE_FOLDER",
@@ -171,6 +175,10 @@ DEFAULT_DESP = {
     "DISABLE_SEARCH": "Disable torrent search plugins. Default: False.",
     "DISABLE_STREAM": "Disable streaming. Default: False.",
     "DISABLE_YTDLP": "Disable YouTube/YT-DLP downloads. Default: False.",
+    "ENABLE_ENCODE": "Enable or disable global FFmpeg video encoding pipeline.",
+    "ENABLE_COMPRESS": "Enable or disable global FFmpeg video compression pipeline.",
+    "ENABLE_WATERMARK": "Enable or disable global FFmpeg watermark processing.",
+    "ENABLE_FFMPEG_CMDS": "Enable or disable custom FFmpeg command presets.",
     "EQUAL_SPLITS": "Split files into equal parts of LEECH_SPLIT_SIZE. Default: False.",
     "EXCLUDED_EXTENSIONS": "File extensions to exclude from upload. Space-separated.",
     "FFMPEG_CMDS": "Custom FFmpeg command presets.",
@@ -415,6 +423,16 @@ async def get_buttons(key=None, edit_type=None, edit_mode=False):
         buttons.data_button("Close", "botset close", style=ButtonStyle.DANGER)
         msg = "<b>⚙️ Global Bot Settings Dashboard</b>\n\n<blockquote>Select a category to configure global bot settings.</blockquote>"
     elif key == "ffmpegcmds":
+        ff_enabled = Config.ENABLE_FFMPEG_CMDS
+        enc_enabled = Config.ENABLE_ENCODE
+        com_enabled = Config.ENABLE_COMPRESS
+        wm_enabled = Config.ENABLE_WATERMARK
+
+        buttons.data_button(f"FFmpeg Cmds: {'ON' if ff_enabled else 'OFF'}", f"botset toggleonoff ENABLE_FFMPEG_CMDS {'off' if ff_enabled else 'on'}", position="header")
+        buttons.data_button(f"Encode: {'ON' if enc_enabled else 'OFF'}", f"botset toggleonoff ENABLE_ENCODE {'off' if enc_enabled else 'on'}")
+        buttons.data_button(f"Compress: {'ON' if com_enabled else 'OFF'}", f"botset toggleonoff ENABLE_COMPRESS {'off' if com_enabled else 'on'}")
+        buttons.data_button(f"Watermark: {'ON' if wm_enabled else 'OFF'}", f"botset toggleonoff ENABLE_WATERMARK {'off' if wm_enabled else 'on'}")
+
         buttons.data_button("Add/Edit FFmpeg Cmds", "botset editff edit")
         buttons.data_button("Delete Specific Preset", "botset delff open")
         buttons.data_button("Reset FFmpeg Cmds", "botset resetff")
