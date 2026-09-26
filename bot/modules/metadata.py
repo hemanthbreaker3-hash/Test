@@ -104,22 +104,29 @@ async def apply_metadata_title(
             for stream in streams:
                 idx, typ = stream["index"], stream["codec_type"]
                 maps += ["-map", f"0:{idx}"]
+                lang_val = None
+                if "tags" in stream and isinstance(stream["tags"], dict):
+                    for tk, tv in stream["tags"].items():
+                        if tk.lower() in ("language", "lang") and tv:
+                            lang_val = tv
+                            break
+
                 if typ == "video":
                     maps += [f"-c:v:{v}", "copy"]
-                    if has_custom_meta and "tags" in stream and "language" in stream["tags"]:
+                    if lang_val:
                         meta_maps += [
                             f"-metadata:s:v:{v}",
-                            f"language={stream['tags']['language']}",
+                            f"language={lang_val}",
                         ]
                     for k, v_ in meta["video"].items():
                         meta_maps += [f"-metadata:s:v:{v}", f"{k}={v_}"]
                     v += 1
                 elif typ == "audio":
                     maps += [f"-c:a:{a}", "copy"]
-                    if has_custom_meta and "tags" in stream and "language" in stream["tags"]:
+                    if lang_val:
                         meta_maps += [
                             f"-metadata:s:a:{a}",
-                            f"language={stream['tags']['language']}",
+                            f"language={lang_val}",
                         ]
                     audio_meta = next(
                         (
@@ -134,10 +141,10 @@ async def apply_metadata_title(
                     a += 1
                 elif typ == "subtitle":
                     maps += [f"-c:s:{s}", "copy"]
-                    if has_custom_meta and "tags" in stream and "language" in stream["tags"]:
+                    if lang_val:
                         meta_maps += [
                             f"-metadata:s:s:{s}",
-                            f"language={stream['tags']['language']}",
+                            f"language={lang_val}",
                         ]
                     sub_meta = next(
                         (

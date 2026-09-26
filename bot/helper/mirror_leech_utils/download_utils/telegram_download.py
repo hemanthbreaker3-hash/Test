@@ -239,6 +239,10 @@ class TelegramDownloadHelper:
             from ...ext_utils.links_utils import (
                 is_telegram_link,
                 is_url,
+                is_magnet,
+                is_gdrive_link,
+                is_gdrive_id,
+                is_mega_link,
             )
             if is_telegram_link(url):
                 try:
@@ -280,6 +284,36 @@ class TelegramDownloadHelper:
                             found_any = True
                 except Exception as e:
                     LOGGER.warning(f"Error fetching nested TG link {url}: {e}")
+            elif is_gdrive_link(url) or is_gdrive_id(url):
+                try:
+                    from ..download_utils.gd_download import add_gd_download
+                    orig_link = self._listener.link
+                    self._listener.link = url
+                    await add_gd_download(self._listener, path)
+                    self._listener.link = orig_link
+                    found_any = True
+                except Exception as e:
+                    LOGGER.warning(f"Error downloading GD link {url}: {e}")
+            elif is_mega_link(url):
+                try:
+                    from ..download_utils.mega_download import add_mega_download
+                    orig_link = self._listener.link
+                    self._listener.link = url
+                    await add_mega_download(self._listener, path)
+                    self._listener.link = orig_link
+                    found_any = True
+                except Exception as e:
+                    LOGGER.warning(f"Error downloading Mega link {url}: {e}")
+            elif is_magnet(url) or (is_url(url) and (url.endswith(".torrent") or "magnet:" in url)):
+                try:
+                    from ..download_utils.aria2_download import add_aria2_download
+                    orig_link = self._listener.link
+                    self._listener.link = url
+                    await add_aria2_download(self._listener, path, "", None, None)
+                    self._listener.link = orig_link
+                    found_any = True
+                except Exception as e:
+                    LOGGER.warning(f"Error downloading torrent/magnet link {url}: {e}")
             elif is_url(url):
                 res = await self._download_direct_url(url, path)
                 if res:
