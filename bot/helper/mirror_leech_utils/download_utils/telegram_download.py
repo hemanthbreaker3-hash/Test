@@ -431,15 +431,27 @@ class TelegramDownloadHelper:
             if self._listener.is_cancelled:
                 break
 
-            media = getattr(message, message.media.value) if message.media else None
+            if isinstance(message, str):
+                try:
+                    from ...telegram_helper.message_utils import get_tg_link_message
+                    sub_msg, _ = await get_tg_link_message(message, range_mode="normal")
+                    if isinstance(sub_msg, list):
+                        message = sub_msg[0]
+                    else:
+                        message = sub_msg
+                except Exception as e:
+                    LOGGER.warning(f"Error resolving TG link string {message}: {e}")
+                    continue
+
+            media = getattr(message, message.media.value) if hasattr(message, "media") and message.media else None
             if media is not None:
                 fallback_name = (
                     media.file_name.rsplit("/", 1)[-1]
                     if hasattr(media, "file_name") and media.file_name
-                    else f"file_{message.id}"
+                    else f"file_{getattr(message, 'id', self._listener.mid)}"
                 )
                 name_source = self._listener.user_dict.get("NAME_SOURCE", "caption")
-                if name_source == "caption" and message.caption:
+                if name_source == "caption" and getattr(message, "caption", None):
                     file_name = clean_caption_filename(message.caption, fallback_name)
                 else:
                     file_name = fallback_name
@@ -447,7 +459,7 @@ class TelegramDownloadHelper:
                 file_path = ospath.join(path, file_name)
                 await self._download_file(message, file_path)
 
-            msg_text = message.text or message.caption or ""
+            msg_text = (getattr(message, "text", "") or getattr(message, "caption", "")) if hasattr(message, "text") or hasattr(message, "caption") else ""
             if msg_text:
                 await self._process_text_links(msg_text, path)
 
