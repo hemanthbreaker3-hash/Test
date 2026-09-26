@@ -194,6 +194,98 @@ class TelegramDownloadHelper:
             await self._on_download_error("Internal error occurred")
         return
 
+    async def _download_direct_url(self, url, path):
+        try:
+            import aiohttp
+            from aiofiles import open as aiopen
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, allow_redirects=True, timeout=aiohttp.ClientTimeout(total=1800)) as resp:
+                    if resp.status == 200:
+                        filename = None
+                        if "Content-Disposition" in resp.headers:
+                            cd = resp.headers["Content-Disposition"]
+                            fname_match = re.findall(r'filename="?([^";]+)"?', cd)
+                            if fname_match:
+                                filename = fname_match[0]
+                        if not filename:
+                            filename = url.rsplit("/", 1)[-1].split("?")[0] or f"file_{self._listener.mid}"
+                        if ospath.isdir(path) or path.endswith("/"):
+                            await makedirs(path, exist_ok=True)
+                            dest_file = ospath.join(path, filename)
+                        else:
+                            dest_file = path
+                            await makedirs(ospath.dirname(dest_file), exist_ok=True)
+                        async with aiopen(dest_file, "wb") as f:
+                            async for chunk in resp.content.iter_chunked(1024 * 1024):
+                                await f.write(chunk)
+                        return True
+        except Exception as e:
+            LOGGER.warning(f"Error downloading direct URL {url}: {e}")
+        return False
+
+    async def _process_text_links(self, msg_text, path):
+        if not msg_text:
+            return False
+        urls = re.findall(r"(?:https?:\/\/|magnet:\?|tg:\/\/)\S+", msg_text)
+        if not urls:
+            return False
+        found_any = False
+        for url in urls:
+            if self._listener.is_cancelled:
+                break
+            url = url.rstrip(".,)]}>\"'")
+            if not url:
+                continue
+            from ...ext_utils.links_utils import (
+                is_telegram_link,
+                is_url,
+            )
+            if is_telegram_link(url):
+                try:
+                    from ...telegram_helper.message_utils import get_tg_link_message
+                    user_range_mode = self._listener.user_dict.get("RANGE_LINK_MODE") or getattr(Config, "RANGE_LINK_MODE", "normal")
+                    tg_msg, s_sess = await get_tg_link_message(url, range_mode=user_range_mode)
+                    if isinstance(tg_msg, list):
+                        for tm in tg_msg:
+                            if isinstance(tm, str):
+                                sub_msg, _ = await get_tg_link_message(tm, range_mode="normal")
+                                tm = sub_msg
+                            if getattr(tm, "media", None):
+                                m_obj = getattr(tm, tm.media.value)
+                                f_name = (
+                                    m_obj.file_name.rsplit("/", 1)[-1]
+                                    if hasattr(m_obj, "file_name") and m_obj.file_name
+                                    else f"file_{tm.id}"
+                                )
+                                res = await self._download_file(tm, ospath.join(path, f_name))
+                                if res:
+                                    found_any = True
+                            elif getattr(tm, "text", None) or getattr(tm, "caption", None):
+                                sub_res = await self._process_text_links(tm.text or tm.caption, path)
+                                if sub_res:
+                                    found_any = True
+                    elif tg_msg and getattr(tg_msg, "media", None):
+                        m_obj = getattr(tg_msg, tg_msg.media.value)
+                        f_name = (
+                            m_obj.file_name.rsplit("/", 1)[-1]
+                            if hasattr(m_obj, "file_name") and m_obj.file_name
+                            else f"file_{tg_msg.id}"
+                        )
+                        res = await self._download_file(tg_msg, ospath.join(path, f_name))
+                        if res:
+                            found_any = True
+                    elif tg_msg and (getattr(tg_msg, "text", None) or getattr(tg_msg, "caption", None)):
+                        sub_res = await self._process_text_links(tg_msg.text or tg_msg.caption, path)
+                        if sub_res:
+                            found_any = True
+                except Exception as e:
+                    LOGGER.warning(f"Error fetching nested TG link {url}: {e}")
+            elif is_url(url):
+                res = await self._download_direct_url(url, path)
+                if res:
+                    found_any = True
+        return found_any
+
     async def add_download(self, message, path, session):
         self.session = session
         if not self.session:
@@ -244,7 +336,6 @@ class TelegramDownloadHelper:
                 self._listener.size = media.file_size
                 gid = token_hex(5)
 
-
                 add_to_queue, event = await check_running_tasks(self._listener)
                 if add_to_queue:
                     LOGGER.info(f"Added to Queue/Download: {self._listener.name}")
@@ -281,12 +372,26 @@ class TelegramDownloadHelper:
                 self._start_time = time()
                 await self._on_download_start(media.file_unique_id, gid, add_to_queue)
                 await self._download(message, path)
+                msg_text = message.text or message.caption or ""
+                if msg_text:
+                    await self._process_text_links(msg_text, ospath.dirname(path) if ospath.isfile(path) else path)
             else:
                 await self._on_download_error("File already being downloaded!")
         else:
-            await self._on_download_error(
-                "No document in the replied message! Use SuperGroup incase you are trying to download with User session!"
-            )
+            msg_text = message.text or message.caption or ""
+            if msg_text:
+                gid = token_hex(5)
+                self._start_time = time()
+                await self._on_download_start(f"txt_{self._listener.mid}", gid, False)
+                res = await self._process_text_links(msg_text, path)
+                if res and not self._listener.is_cancelled:
+                    await self._on_download_complete()
+                elif not self._listener.is_cancelled:
+                    await self._on_download_error("No valid downloadable link found in message text!")
+            else:
+                await self._on_download_error(
+                    "No document or link found in the replied message!"
+                )
 
     async def add_range_download(self, messages, path, session):
         self.session = session or "bot"
@@ -344,68 +449,7 @@ class TelegramDownloadHelper:
 
             msg_text = message.text or message.caption or ""
             if msg_text:
-                urls = re.findall(r"(?:https?:\/\/|magnet:\?|tg:\/\/)\S+", msg_text)
-                for url in urls:
-                    if self._listener.is_cancelled:
-                        break
-                    url = url.rstrip(".,)]}>\"'")
-                    if not url:
-                        continue
-                    from ...ext_utils.links_utils import (
-                        is_telegram_link,
-                        is_url,
-                        is_magnet,
-                        is_gdrive_link,
-                        is_gdrive_id,
-                        is_mega_link,
-                    )
-                    if is_telegram_link(url):
-                        try:
-                            from ...telegram_helper.message_utils import get_tg_link_message
-                            tg_msg, s_sess = await get_tg_link_message(url)
-                            if isinstance(tg_msg, list):
-                                for tm in tg_msg:
-                                    if tm.media:
-                                        m_obj = getattr(tm, tm.media.value)
-                                        f_name = (
-                                            m_obj.file_name.rsplit("/", 1)[-1]
-                                            if hasattr(m_obj, "file_name") and m_obj.file_name
-                                            else f"file_{tm.id}"
-                                        )
-                                        await self._download_file(tm, ospath.join(path, f_name))
-                            elif tg_msg and tg_msg.media:
-                                m_obj = getattr(tg_msg, tg_msg.media.value)
-                                f_name = (
-                                    m_obj.file_name.rsplit("/", 1)[-1]
-                                    if hasattr(m_obj, "file_name") and m_obj.file_name
-                                    else f"file_{tg_msg.id}"
-                                )
-                                await self._download_file(tg_msg, ospath.join(path, f_name))
-                        except Exception as e:
-                            LOGGER.warning(f"Error fetching nested TG link {url}: {e}")
-                    elif is_url(url) or is_magnet(url):
-                        try:
-                            from ..download_utils.aria2_download import add_aria2_download
-                            from ..download_utils.gd_download import add_gd_download
-                            from ..download_utils.mega_download import add_mega_download
-
-                            if is_gdrive_link(url) or is_gdrive_id(url):
-                                orig_link = self._listener.link
-                                self._listener.link = url
-                                await add_gd_download(self._listener, path)
-                                self._listener.link = orig_link
-                            elif is_mega_link(url):
-                                orig_link = self._listener.link
-                                self._listener.link = url
-                                await add_mega_download(self._listener, path)
-                                self._listener.link = orig_link
-                            else:
-                                orig_link = self._listener.link
-                                self._listener.link = url
-                                await add_aria2_download(self._listener, path, "", None, None)
-                                self._listener.link = orig_link
-                        except Exception as e:
-                            LOGGER.warning(f"Error downloading link {url}: {e}")
+                await self._process_text_links(msg_text, path)
 
         if not self._listener.is_cancelled:
             await self._on_download_complete()

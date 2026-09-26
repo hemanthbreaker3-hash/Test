@@ -359,49 +359,46 @@ class Mirror(TaskListener):
         await self.get_tag(text)
 
         if self.ht_flag:
-            is_subtask = getattr(self.message, "_is_bulk_subtask", False)
-            if not is_subtask and getattr(self, "same_dir", None):
-                for fd in self.same_dir.values():
-                    if isinstance(fd, dict) and fd.get("total", 0) > 1:
-                        is_subtask = len(fd.get("tasks", set())) > 1
-                        if is_subtask:
-                            break
-
             user_id = self.user_id
-            event_done = bot_loop.create_future()
-            ht_tasks[self.mid] = {
-                "merge": self.auto_merge or self.manual_merge,
-                "rm_stream": False,
-                "reorder": False,
-                "reorder_aud": [],
-                "reorder_sub": [],
-                "trim": False,
-                "trim_range": "",
-                "extract": False,
-                "extract_types": [],
-                "user_id": user_id,
-                "future": event_done,
-            }
+            saved_ht = None
+            if getattr(self, "same_dir", None) and "_ht_config" in self.same_dir:
+                saved_ht = self.same_dir["_ht_config"]
+            elif self.multi_tag and self.multi_tag in ht_tasks and "saved_ht" in ht_tasks[self.multi_tag]:
+                saved_ht = ht_tasks[self.multi_tag]["saved_ht"]
 
-            def build_ht_menu(mid):
-                t_info = ht_tasks.get(mid, {})
-                m_on = "✓ ON" if t_info.get("merge") else "OFF"
-                tr_on = "✓ ON" if t_info.get("trim") else "OFF"
-                ex_on = "✓ ON" if t_info.get("extract") else "OFF"
+            if not saved_ht:
+                event_done = bot_loop.create_future()
+                ht_tasks[self.mid] = {
+                    "merge": self.auto_merge or self.manual_merge,
+                    "rm_stream": False,
+                    "reorder": False,
+                    "reorder_aud": [],
+                    "reorder_sub": [],
+                    "trim": False,
+                    "trim_range": "",
+                    "extract": False,
+                    "extract_types": [],
+                    "user_id": user_id,
+                    "future": event_done,
+                }
 
-                buttons = ButtonMaker()
-                buttons.data_button(f"Merge: {m_on}", f"htmerge merge {mid}")
-                buttons.data_button(f"Trim: {tr_on}", f"htmerge trim {mid}")
-                buttons.data_button(f"Extract: {ex_on}", f"htmerge extract {mid}")
-                buttons.data_button("Done", f"htmerge done {mid}", position="footer")
-                return buttons
+                def build_ht_menu(mid):
+                    t_info = ht_tasks.get(mid, {})
+                    m_on = "✓ ON" if t_info.get("merge") else "OFF"
+                    tr_on = "✓ ON" if t_info.get("trim") else "OFF"
+                    ex_on = "✓ ON" if t_info.get("extract") else "OFF"
 
-            if is_subtask and hasattr(Mirror, "_last_ht_config") and Mirror._last_ht_config.get("user_id") == user_id:
-                saved_ht = Mirror._last_ht_config.copy()
-            else:
+                    buttons = ButtonMaker()
+                    buttons.data_button(f"Merge: {m_on}", f"htmerge merge {mid}")
+                    buttons.data_button(f"Trim: {tr_on}", f"htmerge trim {mid}")
+                    buttons.data_button(f"Extract: {ex_on}", f"htmerge extract {mid}")
+                    buttons.data_button("Done", f"htmerge done {mid}", position="footer")
+                    return buttons
+
+                initial_merge = "✓ ON" if self.auto_merge or self.manual_merge else "OFF"
                 prompt_msg = await send_message(
                     self.message,
-                    f"<b>Task Received with -ht flag.</b>\nChoose pre-upload options:\n\n• <b>Merge:</b> OFF\n• <b>Trim:</b> OFF\n• <b>Extract:</b> OFF",
+                    f"<b>Task Received with -ht flag.</b>\nChoose pre-upload options:\n\n• <b>Merge:</b> {initial_merge}\n• <b>Trim:</b> OFF\n• <b>Extract:</b> OFF",
                     build_ht_menu(self.mid).build_menu(2),
                 )
                 try:
@@ -410,10 +407,18 @@ class Mirror(TaskListener):
                     pass
 
                 saved_ht = ht_tasks.get(self.mid, {})
-                Mirror._last_ht_config = saved_ht.copy()
+                if getattr(self, "same_dir", None) is not None:
+                    self.same_dir["_ht_config"] = saved_ht.copy()
+                if self.multi_tag:
+                    if self.multi_tag not in ht_tasks:
+                        ht_tasks[self.multi_tag] = {}
+                    ht_tasks[self.multi_tag]["saved_ht"] = saved_ht.copy()
+
                 await delete_message(prompt_msg)
 
             self.manual_merge = saved_ht.get("merge", False)
+            if self.manual_merge:
+                self.auto_merge = True
             self.manual_rm_stream = saved_ht.get("rm_stream", False)
             self.manual_reorder = saved_ht.get("reorder", False)
             self.reorder_aud = saved_ht.get("reorder_aud", [])
@@ -436,7 +441,8 @@ class Mirror(TaskListener):
                 self.link = reply_to.text.split("\n", 1)[0].strip()
         if is_telegram_link(self.link):
             try:
-                reply_to, session = await get_tg_link_message(self.link)
+                user_range_mode = self.user_dict.get("RANGE_LINK_MODE") or getattr(Config, "RANGE_LINK_MODE", "normal")
+                reply_to, session = await get_tg_link_message(self.link, range_mode=user_range_mode)
             except Exception as e:
                 await send_message(self.message, f"ERROR: {e}")
                 await self.remove_from_same_dir()

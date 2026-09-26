@@ -57,7 +57,7 @@ async def _pick_clients(wl, clients, count):
 class HypertgDownload(HypertgTransfer):
     KB = 1024
     _MIN_CHUNK = 64 * KB
-    _DEFAULT_PIPELINE = 32
+    _DEFAULT_PIPELINE = 64
     _MIN_PIPELINE = 4
     _MAX_PIPELINE_MULT = 4
     _LOW_WORKERS = 2
@@ -66,7 +66,7 @@ class HypertgDownload(HypertgTransfer):
 
     def __init__(self, obj):
         super().__init__(obj)
-        self.chunk_size = max(Config.HYPER_CHUNK or 256 * self.KB, self._MIN_CHUNK)
+        self.chunk_size = max(Config.HYPER_CHUNK or 512 * self.KB, self._MIN_CHUNK)
         self.num_parts = Config.HYPER_THREADS or max(
             self._LOW_WORKERS, min(self._HIGH_WORKERS, self.num_clients)
         )

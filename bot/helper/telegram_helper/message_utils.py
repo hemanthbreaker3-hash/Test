@@ -360,12 +360,22 @@ def parse_tg_link(link: str):
     return _parse_single_tg_link(link)
 
 
-async def get_tg_link_message(link):
+async def get_tg_link_message(link, range_mode="normal"):
     chat, msg_ids, private = parse_tg_link(link)
     if private and not TgClient.user:
         raise TgLinkException("USER_SESSION_STRING required for this private link!")
 
     is_range = isinstance(msg_ids, list)
+
+    if is_range and range_mode == "each":
+        links_list = []
+        for mid in msg_ids:
+            if private or (isinstance(chat, int) and str(chat).startswith("-100")):
+                cid = str(chat)[4:] if str(chat).startswith("-100") else str(chat)
+                links_list.append(f"https://t.me/c/{cid}/{mid}")
+            else:
+                links_list.append(f"https://t.me/{chat}/{mid}")
+        return links_list, "bot"
 
     if not private:
         try:

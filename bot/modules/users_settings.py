@@ -1473,6 +1473,15 @@ Configure custom video encoding, compression, and watermark overlays for uploads
             position="header",
         )
 
+        range_mode = user_dict.get("RANGE_LINK_MODE") or getattr(Config, "RANGE_LINK_MODE", "normal")
+        rm_label = "Each Message" if range_mode == "each" else "Normal (Batch)"
+        next_rm = "normal" if range_mode == "each" else "each"
+        buttons.data_button(
+            f"Range Link Mode: {rm_label}",
+            f"userset {user_id} range_mode {next_rm}",
+            position="header",
+        )
+
         buttons.data_button(
             "Excluded Extensions", f"userset {user_id} menu EXCLUDED_EXTENSIONS"
         )
@@ -1536,6 +1545,7 @@ Configure custom video encoding, compression, and watermark overlays for uploads
         text = f"""<b>🛠️ Advanced Options Settings</b>
 
 <blockquote>• <b>User:</b> {user_name}
+• <b>Range Link Mode:</b> <b>{rm_label}</b>
 • <b>Name Swap Patterns:</b> {ns_msg}
 • <b>Auto Rename:</b> <b>{'Enabled' if auto_rename else 'Disabled'}</b>
 • <b>Rename Format:</b> <code>{escape(str(rename_fmt))}</code>
@@ -2632,6 +2642,11 @@ async def edit_user_settings(client, query):
     elif data[2] == "name_source":
         await query.answer()
         update_user_ldata(user_id, "NAME_SOURCE", data[3])
+        await update_user_settings(query, stype="advanced")
+        await database.update_user_data(user_id)
+    elif data[2] == "range_mode":
+        await query.answer()
+        update_user_ldata(user_id, "RANGE_LINK_MODE", data[3])
         await update_user_settings(query, stype="advanced")
         await database.update_user_data(user_id)
     elif data[2] in ["gd", "rc"]:
