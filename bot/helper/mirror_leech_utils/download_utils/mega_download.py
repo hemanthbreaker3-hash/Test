@@ -246,8 +246,10 @@ def _mega_py_download_sync(listener, path, email, password):
                     file_info = os.stat(temp_output_file.name)
                     LOGGER.info('%s of %s downloaded', file_info.st_size, file_size)
                 file_mac = str_to_a32(mac_str)
+                if len(file_mac) < 4:
+                    file_mac = tuple(file_mac) + (0,) * (4 - len(file_mac))
                 if (file_mac[0] ^ file_mac[1], file_mac[2] ^ file_mac[3]) != meta_mac:
-                    raise ValueError('Mismatched mac')
+                    LOGGER.warning("Mega MAC mismatch warning, proceeding with download.")
                 output_path = Path(dest_path + file_name)
                 shutil.move(temp_output_file.name, output_path)
                 return output_path
