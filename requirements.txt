@@ -38,5 +38,4 @@ uvicorn
 uvloop
 xattr
 yt-dlp[default,curl-cffi]
-mega.py>=1.0.8
 pycryptodome
