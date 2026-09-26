@@ -433,18 +433,7 @@ async def get_buttons(key=None, edit_type=None, edit_mode=False):
         buttons.data_button("Reset FFmpeg Cmds", "botset resetff")
         buttons.data_button("Back", "botset back")
         buttons.data_button("Close", "botset close", style=ButtonStyle.DANGER)
-    elif key == "blocked_ff":
-        enc_enabled = Config.ENABLE_ENCODE
-        com_enabled = Config.ENABLE_COMPRESS
-        wm_enabled = Config.ENABLE_WATERMARK
 
-        buttons.data_button(f"Watermark: {'✓ ON (Allowed)' if wm_enabled else '✕ OFF (Blocked)'}", f"botset toggle_block_ff ENABLE_WATERMARK {'off' if wm_enabled else 'on'}")
-        buttons.data_button(f"Compress: {'✓ ON (Allowed)' if com_enabled else '✕ OFF (Blocked)'}", f"botset toggle_block_ff ENABLE_COMPRESS {'off' if com_enabled else 'on'}")
-        buttons.data_button(f"Encode: {'✓ ON (Allowed)' if enc_enabled else '✕ OFF (Blocked)'}", f"botset toggle_block_ff ENABLE_ENCODE {'off' if enc_enabled else 'on'}")
-
-        buttons.data_button("Back", "botset ffmpegcmds", position="footer")
-        buttons.data_button("Close", "botset close", position="footer", style=ButtonStyle.DANGER)
-        msg = "<b>🚫 Blocked Commands Management</b>\n\n<blockquote>Independently enable or disable Watermark, Compress, and Encode options. If an option is disabled (blocked), users will be restricted from configuring or executing that command.</blockquote>"
         ff_display = ""
         ff_items = list(Config.FFMPEG_CMDS.items()) if Config.FFMPEG_CMDS and isinstance(Config.FFMPEG_CMDS, dict) else []
         page_items = ff_items[start : start + 5]
@@ -466,6 +455,18 @@ async def get_buttons(key=None, edit_type=None, edit_mode=False):
                 )
         if edit_mode:
             msg += "\n\n<blockquote>Send dict format: <code>{'tel': ['cmd1', 'cmd2']}</code> or single entry format: <code>KEY: command</code>\n⏱️ <b>Time Left:</b> <code>60 sec</code></blockquote>"
+    elif key == "blocked_ff":
+        enc_enabled = Config.ENABLE_ENCODE
+        com_enabled = Config.ENABLE_COMPRESS
+        wm_enabled = Config.ENABLE_WATERMARK
+
+        buttons.data_button(f"Watermark: {'✓ ON (Allowed)' if wm_enabled else '✕ OFF (Blocked)'}", f"botset toggle_block_ff ENABLE_WATERMARK {'off' if wm_enabled else 'on'}")
+        buttons.data_button(f"Compress: {'✓ ON (Allowed)' if com_enabled else '✕ OFF (Blocked)'}", f"botset toggle_block_ff ENABLE_COMPRESS {'off' if com_enabled else 'on'}")
+        buttons.data_button(f"Encode: {'✓ ON (Allowed)' if enc_enabled else '✕ OFF (Blocked)'}", f"botset toggle_block_ff ENABLE_ENCODE {'off' if enc_enabled else 'on'}")
+
+        buttons.data_button("Back", "botset ffmpegcmds", position="footer")
+        buttons.data_button("Close", "botset close", position="footer", style=ButtonStyle.DANGER)
+        msg = "<b>🚫 Blocked Commands Management</b>\n\n<blockquote>Independently enable or disable Watermark, Compress, and Encode options. If an option is disabled (blocked), users will be restricted from configuring or executing that command.</blockquote>"
     elif key == "delff":
         buttons.data_button("Back", "botset ffmpegcmds", position="footer")
         buttons.data_button("Close", "botset close", position="footer", style=ButtonStyle.DANGER)
