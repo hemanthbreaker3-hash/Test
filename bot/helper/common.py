@@ -496,6 +496,9 @@ class TaskConfig:
                     resolved_dest = dump_chats.get(d_val) or d_val
                     if resolved_dest and resolved_dest not in self.key_dump_dests:
                         self.key_dump_dests.append(resolved_dest)
+                elif Config.LEECH_LOG_CHAT:
+                    if Config.LEECH_LOG_CHAT not in self.key_dump_dests:
+                        self.key_dump_dests.append(Config.LEECH_LOG_CHAT)
 
             universal_dump = self.user_dict.get("LEECH_DUMP_CHAT") or Config.LEECH_LOG_CHAT or ""
             if self.key_dump_dests:
@@ -662,25 +665,26 @@ class TaskConfig:
                 self.up_dest = dump_chats.get(self.dump_dest)
                 if self.up_dest is None:
                     chat, thread = parse_dest(self.dump_dest)
-                    if isinstance(chat, int) or (isinstance(chat, str) and chat.startswith("@")):
+                    if isinstance(chat, int) or (isinstance(chat, str) and (chat.startswith("@") or chat.lstrip("-").isdigit())):
                         self.up_dest = chat
                         if thread is not None:
                             self.chat_thread_id = thread
-                    elif dump_chats:
-                        up_dest, is_cancelled = await open_dump_chat_btns(
-                            self.message, dump_chats, self.dump_dest
-                        )
-                        if is_cancelled:
-                            self.is_cancelled = True
-                            return
-                        if not up_dest:
-                            raise ValueError("No dump chat selected!")
-                        self.up_dest = up_dest
                     else:
-                        raise ValueError(
-                            f"Unknown dump chat '{self.dump_dest}'! "
-                            f"Configured dumps: none"
-                        )
+                        default_dump = Config.LEECH_LOG_CHAT or self.user_dict.get("LEECH_DUMP_CHAT") or ""
+                        if default_dump:
+                            self.up_dest, thread = parse_dest(default_dump)
+                            if thread is not None:
+                                self.chat_thread_id = thread
+                        elif dump_chats:
+                            up_dest, is_cancelled = await open_dump_chat_btns(
+                                self.message, dump_chats, self.dump_dest
+                            )
+                            if is_cancelled:
+                                self.is_cancelled = True
+                                return
+                            if not up_dest:
+                                raise ValueError("No dump chat selected!")
+                            self.up_dest = up_dest
 
             if self.up_dest:
                 if not isinstance(self.up_dest, int):

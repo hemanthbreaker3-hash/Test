@@ -393,29 +393,52 @@ class TelegramUploader:
     async def _sequence_copies(self, src_chat):
         from ...ext_utils.bot_utils import parse_dest
         destinations = []
-        # Always send to user DM
-        destinations.append((self._listener.user_id, None))
 
-        # Configured user dump for this specific user
-        if self._listener.leech_dest and self._listener.leech_dest != self._listener.user_id:
+        def add_dest(c_chat, c_thread):
+            if c_chat is not None:
+                if isinstance(c_chat, str) and c_chat.lstrip("-").isdigit():
+                    c_chat = int(c_chat)
+                if (c_chat, c_thread) not in destinations:
+                    destinations.append((c_chat, c_thread))
+
+        # Always send to user DM
+        add_dest(self._listener.user_id, None)
+
+        # Configured user dump for this specific user (user settings)
+        user_dump = self._listener.user_dict.get("LEECH_DUMP_CHAT")
+        if user_dump:
+            u_chat, u_thread = parse_dest(user_dump) if not isinstance(user_dump, int) else (user_dump, None)
+            add_dest(u_chat, u_thread)
+
+        # Task leech_dest
+        if self._listener.leech_dest:
             d_chat, d_thread = parse_dest(self._listener.leech_dest) if not isinstance(self._listener.leech_dest, int) else (self._listener.leech_dest, self._listener.leech_thread_id)
-            if d_chat and (d_chat, d_thread) not in destinations:
-                destinations.append((d_chat, d_thread))
+            add_dest(d_chat, d_thread)
 
         # Global dump / leech log chat or task dump
         global_dump = self._listener.up_dest
-        if global_dump and global_dump not in (self._listener.user_id, self._listener.leech_dest):
+        if global_dump:
             g_chat, g_thread = parse_dest(global_dump) if not isinstance(global_dump, int) else (global_dump, self._listener.chat_thread_id)
-            if g_chat and (g_chat, g_thread) not in destinations:
-                destinations.append((g_chat, g_thread))
+            add_dest(g_chat, g_thread)
+
+        # Owner/sudo default LEECH_LOG_CHAT
+        if Config.LEECH_LOG_CHAT:
+            l_chat, l_thread = parse_dest(Config.LEECH_LOG_CHAT) if not isinstance(Config.LEECH_LOG_CHAT, int) else (Config.LEECH_LOG_CHAT, None)
+            add_dest(l_chat, l_thread)
+
+        # Owner/sudo configured LEECH_DUMP_CHATS
+        if Config.LEECH_DUMP_CHATS and isinstance(Config.LEECH_DUMP_CHATS, dict):
+            for d_val in Config.LEECH_DUMP_CHATS.values():
+                if d_val:
+                    c_chat, c_thread = parse_dest(d_val) if not isinstance(d_val, int) else (d_val, None)
+                    add_dest(c_chat, c_thread)
 
         # Key-specific leech dump destinations
         if hasattr(self._listener, "key_dump_dests") and self._listener.key_dump_dests:
             for k_dest in self._listener.key_dump_dests:
                 if k_dest:
                     k_chat, k_thread = parse_dest(k_dest) if not isinstance(k_dest, int) else (k_dest, None)
-                    if k_chat and (k_chat, k_thread) not in destinations:
-                        destinations.append((k_chat, k_thread))
+                    add_dest(k_chat, k_thread)
 
         for entry in self._upload_seq:
             if entry is None:

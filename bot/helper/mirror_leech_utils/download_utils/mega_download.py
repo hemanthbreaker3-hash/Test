@@ -67,16 +67,22 @@ def _find_child_by_handle(api, parent_node, target_handle):
 def _find_child_in_list(children, target_handle):
     if not children:
         return None
+    target_int = _mega_base64_to_int(target_handle)
     try:
         _to_handle = getattr(MegaApi, "base64ToHandle", None)
-        target_int = _to_handle(target_handle) if callable(_to_handle) else None
+        if callable(_to_handle) and target_int is None:
+            target_int = _to_handle(target_handle)
     except Exception:
-        target_int = None
+        pass
     for i in range(children.size()):
         child = children.get(i)
         try:
             ch = child.getHandle()
-            if ch == target_handle or (target_int is not None and ch == target_int):
+            if (
+                ch == target_handle
+                or (target_int is not None and ch == target_int)
+                or (hasattr(child, "getName") and child.getName() == target_handle)
+            ):
                 return child
         except Exception:
             pass

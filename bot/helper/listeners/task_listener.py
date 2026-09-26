@@ -142,6 +142,15 @@ class TaskListener(TaskConfig):
                 if (u_chat, u_thread) not in start_dests:
                     start_dests.append((u_chat, u_thread))
 
+        if self.is_leech and Config.LEECH_DUMP_CHATS:
+            for d_val in Config.LEECH_DUMP_CHATS.values():
+                if d_val:
+                    g_chat, g_thread = parse_dest(d_val) if not isinstance(d_val, int) else (d_val, None)
+                    if isinstance(g_chat, int) or (isinstance(g_chat, str) and (g_chat.startswith("@") or g_chat.lstrip("-").isdigit())):
+                        g_chat = int(g_chat) if isinstance(g_chat, str) and g_chat.lstrip("-").isdigit() else g_chat
+                        if (g_chat, g_thread) not in start_dests:
+                            start_dests.append((g_chat, g_thread))
+
         for d_chat, d_thread in start_dests:
             if d_chat and d_chat != self.message.chat.id:
                 await send_message(d_chat, start_dump_msg, message_thread_id=d_thread)
