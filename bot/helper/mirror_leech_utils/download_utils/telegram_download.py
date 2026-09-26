@@ -253,17 +253,16 @@ class TelegramDownloadHelper:
                         for tm in tg_msg:
                             if isinstance(tm, str):
                                 sub_msg, _ = await get_tg_link_message(tm, range_mode="normal")
-                                tm = sub_msg
+                                tm = sub_msg[0] if isinstance(sub_msg, list) and sub_msg else sub_msg
                             if getattr(tm, "media", None):
                                 m_obj = getattr(tm, tm.media.value)
                                 f_name = (
                                     m_obj.file_name.rsplit("/", 1)[-1]
                                     if hasattr(m_obj, "file_name") and m_obj.file_name
-                                    else f"file_{tm.id}"
+                                    else f"file_{getattr(tm, 'id', self._listener.mid)}"
                                 )
-                                res = await self._download_file(tm, ospath.join(path, f_name))
-                                if res:
-                                    found_any = True
+                                await self._download_file(tm, ospath.join(path, f_name))
+                                found_any = True
                             elif getattr(tm, "text", None) or getattr(tm, "caption", None):
                                 sub_res = await self._process_text_links(tm.text or tm.caption, path)
                                 if sub_res:
@@ -273,11 +272,10 @@ class TelegramDownloadHelper:
                         f_name = (
                             m_obj.file_name.rsplit("/", 1)[-1]
                             if hasattr(m_obj, "file_name") and m_obj.file_name
-                            else f"file_{tg_msg.id}"
+                            else f"file_{getattr(tg_msg, 'id', self._listener.mid)}"
                         )
-                        res = await self._download_file(tg_msg, ospath.join(path, f_name))
-                        if res:
-                            found_any = True
+                        await self._download_file(tg_msg, ospath.join(path, f_name))
+                        found_any = True
                     elif tg_msg and (getattr(tg_msg, "text", None) or getattr(tg_msg, "caption", None)):
                         sub_res = await self._process_text_links(tg_msg.text or tg_msg.caption, path)
                         if sub_res:

@@ -29,7 +29,7 @@ from ..ext_utils.task_manager import clear_task_state
 from ...core.tg_client import TgClient
 from ...core.config_manager import Config
 from ...core.torrent_manager import TorrentManager
-from ..ext_utils.bot_utils import sync_to_async
+from ..ext_utils.bot_utils import sync_to_async, parse_dest
 from ..ext_utils.links_utils import encode_slink
 from ..ext_utils.db_handler import database
 from ..ext_utils.files_utils import (
