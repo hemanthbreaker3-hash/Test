@@ -1371,9 +1371,10 @@ Configure custom video encoding, compression, and watermark overlays for uploads
         avail_keys = list(merged_ff.keys())
         if avail_keys:
             lines = []
-            for k in avail_keys:
+            for k, cmds in merged_ff.items():
                 source_tag = " (User)" if k in user_ff else " (Global)"
-                lines.append(f"• <code>-ff {escape(str(k))}</code>{source_tag}")
+                cmds_str = ", ".join(cmds) if isinstance(cmds, list) else str(cmds)
+                lines.append(f"• <code>-ff {escape(str(k))}</code>{source_tag}: <code>{escape(cmds_str)}</code>")
             ffc_display = "\n" + "\n".join(lines)
         else:
             ffc_display = "<b>None Configured</b>"
