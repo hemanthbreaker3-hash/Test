@@ -501,8 +501,10 @@ async def get_user_settings(from_user, stype="main"):
 
     elif stype == "leech":
         thumbpath = f"thumbnails/{user_id}.jpg"
-        buttons.data_button("Thumbnail", f"userset {user_id} menu THUMBNAIL")
-        thumbmsg = "Exists" if await aiopath.exists(thumbpath) else "Not Exists"
+        has_thumb = await aiopath.exists(thumbpath)
+        thumb_mode = user_dict.get("THUMBNAIL_MODE", "custom" if has_thumb else "none")
+        buttons.data_button("Thumbnail", f"userset {user_id} thumb_select")
+        thumbmsg = f"{thumb_mode.title()} ({'Exists' if has_thumb else 'Not Exists'})"
         buttons.data_button(
             "Leech Split Size", f"userset {user_id} menu LEECH_SPLIT_SIZE"
         )
@@ -657,6 +659,41 @@ async def get_user_settings(from_user, stype="main"):
 • <b>Sequence Upload:</b> <b>{'Enabled' if sequence_enabled else 'Disabled'}</b>
 • <b>Auto Leech:</b> <b>{'Enabled' if auto_leech else 'Disabled'}</b></blockquote>"""
 
+    elif stype == "thumb_select":
+        thumbpath = f"thumbnails/{user_id}.jpg"
+        has_thumb = await aiopath.exists(thumbpath)
+        cur_mode = user_dict.get("THUMBNAIL_MODE", "custom" if has_thumb else "none")
+
+        c_state = "✓ " if cur_mode == "custom" else ""
+        n_state = "✓ " if cur_mode == "none" else ""
+        r_state = "✓ " if cur_mode == "random" else ""
+
+        buttons.data_button(f"{c_state}Custom Thumbnail", f"userset {user_id} thumb_mode custom")
+        buttons.data_button(f"{n_state}No Thumbnail", f"userset {user_id} thumb_mode none")
+        buttons.data_button(f"{r_state}Random Thumbnail", f"userset {user_id} thumb_mode random")
+
+        if cur_mode == "custom" and has_thumb:
+            buttons.data_button("View Thumb", f"userset {user_id} view THUMBNAIL", "header")
+            buttons.data_button("Change Thumb", f"userset {user_id} file THUMBNAIL")
+            buttons.data_button("Remove Thumb", f"userset {user_id} remove THUMBNAIL")
+        elif cur_mode == "custom" and not has_thumb:
+            buttons.data_button("Set Custom Thumb", f"userset {user_id} file THUMBNAIL", "header")
+
+        buttons.data_button("◀️ Back", f"userset {user_id} leech", "footer")
+        buttons.data_button(
+            "❌ Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER
+        )
+
+        thumb_status = "Exists" if has_thumb else "Not Configured"
+        text = f"""<b>🖼️ User Thumbnail Settings</b>
+
+<blockquote>• <b>User:</b> {user_name}
+• <b>Active Mode:</b> <b>{cur_mode.title()}</b>
+• <b>Custom Thumb Status:</b> <b>{thumb_status}</b></blockquote>
+
+Select thumbnail option for Telegram uploads:"""
+        btns = buttons.build_menu(2)
+
     elif stype == "enc_com_wm":
         enc_enabled = user_dict.get("ENABLE_ENCODE") if "ENABLE_ENCODE" in user_dict else Config.ENABLE_ENCODE
         com_enabled = user_dict.get("ENABLE_COMPRESS") if "ENABLE_COMPRESS" in user_dict else Config.ENABLE_COMPRESS
@@ -803,14 +840,6 @@ Configure custom video encoding, compression, and watermark overlays for uploads
             f"userset {user_id} tog AUTO_MERGE {'f' if auto_merge else 't'} vtools",
         )
 
-        track_manager = user_dict.get("TRACK_MANAGER", False) or (
-            "TRACK_MANAGER" not in user_dict and getattr(Config, "TRACK_MANAGER", False)
-        )
-        buttons.data_button(
-            f"Track Manager: {'✓ ON' if track_manager else 'OFF'}",
-            f"userset {user_id} tog TRACK_MANAGER {'f' if track_manager else 't'} vtools",
-        )
-
         save_files = user_dict.get("SAVE_FILES", False)
         buttons.data_button(
             f"Keep Original Files: {'✓ ON' if save_files else 'OFF'}",
@@ -827,7 +856,6 @@ Configure custom video encoding, compression, and watermark overlays for uploads
 
 <blockquote>• <b>User:</b> {user_name}
 • <b>Auto Video Merge:</b> <b>{'Enabled' if auto_merge else 'Disabled'}</b>
-• <b>Track Manager:</b> <b>{'Enabled' if track_manager else 'Disabled'}</b>
 • <b>Keep Original Files on Merge:</b> <b>{'Enabled' if save_files else 'Disabled'}</b></blockquote>"""
 
     elif stype == "uphoster":
@@ -1609,6 +1637,8 @@ async def add_file(_, message, ftype, rfunc, target_user_id=None):
     await delete_message(message)
     if des_dir:
         update_user_ldata(user_id, ftype, des_dir)
+        if ftype == "THUMBNAIL":
+            update_user_ldata(user_id, "THUMBNAIL_MODE", "custom")
         await database.update_user_doc(user_id, ftype, des_dir)
     await rfunc()
 
@@ -2040,6 +2070,7 @@ async def edit_user_settings(client, query):
         "general",
         "mirror",
         "leech",
+        "thumb_select",
         "lfont",
         "vtools",
         "uphoster",
@@ -2055,6 +2086,15 @@ async def edit_user_settings(client, query):
     ]:
         await query.answer()
         await update_user_settings(query, data[2])
+    elif data[2] == "thumb_mode":
+        mode = data[3]
+        update_user_ldata(user_id, "THUMBNAIL_MODE", mode)
+        await database.update_user_data(user_id)
+        if mode == "custom" and not await aiopath.exists(thumb_path):
+            await query.answer("Please set a custom thumbnail image!", show_alert=True)
+        else:
+            await query.answer()
+        await update_user_settings(query, "thumb_select")
     elif data[2] == "mega":
         await query.answer()
         msg, button = await get_user_settings(query.from_user, "mega")
@@ -2216,7 +2256,7 @@ async def edit_user_settings(client, query):
                 back_to = "gofile"
             elif data[3] == "SEEDR_DELETE_FOLDER":
                 back_to = "seedr"
-            elif data[3] in ["AUTO_MERGE", "SAVE_FILES", "TRACK_MANAGER"]:
+            elif data[3] in ["AUTO_MERGE", "SAVE_FILES"]:
                 back_to = "vtools"
             elif data[3] == "SET_ALL_METADATA_ENABLE":
                 back_to = "ffset"
@@ -2249,7 +2289,8 @@ async def edit_user_settings(client, query):
         new_message_text = f"<b>Upload {prompt_title}</b>\n\n{text}"
         await edit_message(message, new_message_text, buttons.build_menu(1))
         rfunc = partial(get_menu, data[3], message, user_id)
-        pfunc = partial(add_file, ftype=data[3], rfunc=rfunc, target_user_id=user_id)
+        rfunc_back = partial(update_user_settings, query, stype="thumb_select") if data[3] == "THUMBNAIL" else rfunc
+        pfunc = partial(add_file, ftype=data[3], rfunc=rfunc_back, target_user_id=user_id)
         await event_handler(
             client,
             query,
@@ -2300,6 +2341,8 @@ async def edit_user_settings(client, query):
             if await aiopath.exists(fpath):
                 await remove(fpath)
             del user_dict[data[3]]
+            if data[3] == "THUMBNAIL":
+                update_user_ldata(user_id, "THUMBNAIL_MODE", "none")
             await database.update_user_doc(user_id, data[3])
         else:
             update_user_ldata(user_id, data[3], "")
@@ -2308,7 +2351,10 @@ async def edit_user_settings(client, query):
             elif data[3] == "SEEDR_EMAIL":
                 update_user_ldata(user_id, "SEEDR_PASSWORD", "")
             await database.update_user_data(user_id)
-        await get_menu(data[3], message, user_id)
+        if data[3] == "THUMBNAIL":
+            await update_user_settings(query, "thumb_select")
+        else:
+            await get_menu(data[3], message, user_id)
     elif data[2] == "reset":
         await query.answer("Reset option to default!", show_alert=True)
         user_dict.pop(data[3], None)
