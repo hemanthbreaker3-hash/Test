@@ -349,6 +349,9 @@ class HypertgUpload(HypertgTransfer):
                     kwargs["title"] = title
                 if thumb:
                     kwargs["thumb"] = thumb
+            else:
+                if thumb:
+                    kwargs["thumb"] = thumb
 
             if key == "videos":
                 kwargs["video"] = file_path

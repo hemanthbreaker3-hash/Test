@@ -122,7 +122,11 @@ class TelegramUploader:
         if self._user_session and TgClient.user is None:
             self._user_session = False
 
-        target_chat_id = self._listener.up_dest or self._listener.user_id
+        user_tokens = self._listener.user_dict.get("BOT_TOKENS", [])
+        if not user_tokens or not isinstance(user_tokens, list):
+            target_chat_id = self._listener.user_id
+        else:
+            target_chat_id = self._listener.up_dest or self._listener.user_id
 
         if self._user_session:
             try:
