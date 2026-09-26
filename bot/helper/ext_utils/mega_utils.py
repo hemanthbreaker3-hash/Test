@@ -180,8 +180,8 @@ def _get_mega_account_info_sync(email: str, password: str) -> str:
         try:
             from mega import Mega
             m = Mega()
-            m_user = m.login(email, password)
-            account_info = m.get_storage_space(u=m_user)
+            m.login(email, password)
+            account_info = m.get_storage_space()
             user_info = m.get_user() or {}
 
             used_bytes = account_info.get("used", 0) if isinstance(account_info, dict) else 0
