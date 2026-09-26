@@ -71,11 +71,14 @@ def _db_partition_id(bot_id):
 
 
 async def _fetch_db_config(database_url, db_part, collection="config"):
+    pip_cmd = "pip"
+    if srun(["which", "uv"], capture_output=True).returncode == 0:
+        pip_cmd = "uv pip"
     try:
         from pymongo import AsyncMongoClient
         from pymongo.server_api import ServerApi
     except ImportError:
-        scall("uv pip install pymongo", shell=True)
+        scall(f"{pip_cmd} install pymongo", shell=True)
         from pymongo import AsyncMongoClient
         from pymongo.server_api import ServerApi
     conn = AsyncMongoClient(database_url, server_api=ServerApi("1"))
@@ -170,8 +173,11 @@ def _run_update(upstream_repo, upstream_branch, version):
 
 
 def _update_packages():
-    scall("uv pip install -U -r requirements.txt", shell=True)
-    scall("uv pip install --no-deps mega.py>=1.0.8", shell=True)
+    pip_cmd = "pip"
+    if srun(["which", "uv"], capture_output=True).returncode == 0:
+        pip_cmd = "uv pip"
+    scall(f"{pip_cmd} install -U -r requirements.txt", shell=True)
+    scall(f"{pip_cmd} install --no-deps mega.py>=1.0.8", shell=True)
     _LOGGER.info("Successfully Updated all the Packages!")
 
 
