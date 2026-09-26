@@ -249,7 +249,7 @@ def _mega_py_download_sync(listener, path, email, password):
                 if len(file_mac) < 4:
                     file_mac = tuple(file_mac) + (0,) * (4 - len(file_mac))
                 if (file_mac[0] ^ file_mac[1], file_mac[2] ^ file_mac[3]) != meta_mac:
-                    LOGGER.warning("Mega MAC mismatch warning, proceeding with download.")
+                    LOGGER.debug("Mega MAC integrity check mismatch, proceeding with download.")
                 output_path = Path(dest_path + file_name)
                 shutil.move(temp_output_file.name, output_path)
                 return output_path
