@@ -288,9 +288,9 @@ class TaskListener(TaskConfig):
         from ..telegram_helper.filters import CustomFilters
         is_sudo_user = await CustomFilters.sudo("", self.message)
 
-        enable_encode = (self.user_dict.get("ENABLE_ENCODE") if "ENABLE_ENCODE" in self.user_dict else Config.ENABLE_ENCODE) if is_sudo_user else False
-        enable_compress = (self.user_dict.get("ENABLE_COMPRESS") if "ENABLE_COMPRESS" in self.user_dict else Config.ENABLE_COMPRESS) if is_sudo_user else False
-        enable_watermark = (self.user_dict.get("ENABLE_WATERMARK") if "ENABLE_WATERMARK" in self.user_dict else Config.ENABLE_WATERMARK) if is_sudo_user else False
+        enable_encode = Config.ENABLE_ENCODE and (self.user_dict.get("ENABLE_ENCODE") if "ENABLE_ENCODE" in self.user_dict else True) if is_sudo_user else False
+        enable_compress = Config.ENABLE_COMPRESS and (self.user_dict.get("ENABLE_COMPRESS") if "ENABLE_COMPRESS" in self.user_dict else True) if is_sudo_user else False
+        enable_watermark = Config.ENABLE_WATERMARK and (self.user_dict.get("ENABLE_WATERMARK") if "ENABLE_WATERMARK" in self.user_dict else True) if is_sudo_user else False
 
         if enable_encode:
             try:

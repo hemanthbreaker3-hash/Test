@@ -461,7 +461,9 @@ class TaskConfig:
         else:
             gc_used = False
 
-        if self.ffmpeg_cmds is not None:
+        if not Config.ENABLE_FFMPEG_CMDS:
+            self.ffmpeg_cmds = None
+        elif self.ffmpeg_cmds is not None:
             raw_input = self.ffmpeg_cmds if isinstance(self.ffmpeg_cmds, (list, set, tuple)) else [self.ffmpeg_cmds]
             keys = []
             for item in raw_input:

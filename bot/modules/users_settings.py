@@ -2113,6 +2113,12 @@ async def edit_user_settings(client, query):
                 "Not allowed! This feature is restricted to Owner/Sudo users only.",
                 show_alert=True,
             )
+        if data[2] == "encode_menu" and not Config.ENABLE_ENCODE:
+            return await query.answer("Encode command option is blocked/disabled by Bot Owner!", show_alert=True)
+        if data[2] == "compress_menu" and not Config.ENABLE_COMPRESS:
+            return await query.answer("Compress command option is blocked/disabled by Bot Owner!", show_alert=True)
+        if data[2] == "watermark_menu" and not Config.ENABLE_WATERMARK:
+            return await query.answer("Watermark command option is blocked/disabled by Bot Owner!", show_alert=True)
         await query.answer()
         await update_user_settings(query, data[2])
     elif data[2] in [
@@ -2276,6 +2282,14 @@ async def edit_user_settings(client, query):
         text = "<b>🌐 Select Active Uphoster Destinations:</b>"
         await edit_message(message, text, buttons.build_menu(2))
     elif data[2] == "menu":
+        if data[3] == "FFMPEG_CMDS" and not Config.ENABLE_FFMPEG_CMDS:
+            return await query.answer("FFmpeg CMDs preset option is blocked/disabled by Bot Owner!", show_alert=True)
+        if data[3].startswith("ENC_") and not Config.ENABLE_ENCODE:
+            return await query.answer("Encode command option is blocked/disabled by Bot Owner!", show_alert=True)
+        if data[3].startswith("COM_") and not Config.ENABLE_COMPRESS:
+            return await query.answer("Compress command option is blocked/disabled by Bot Owner!", show_alert=True)
+        if data[3].startswith("WM_") and not Config.ENABLE_WATERMARK:
+            return await query.answer("Watermark command option is blocked/disabled by Bot Owner!", show_alert=True)
         await query.answer()
         await get_menu(data[3], message, user_id)
     elif data[2] == "ffpage":

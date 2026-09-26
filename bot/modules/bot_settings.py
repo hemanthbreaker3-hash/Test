@@ -424,20 +424,27 @@ async def get_buttons(key=None, edit_type=None, edit_mode=False):
         msg = "<b>⚙️ Global Bot Settings Dashboard</b>\n\n<blockquote>Select a category to configure global bot settings.</blockquote>"
     elif key == "ffmpegcmds":
         ff_enabled = Config.ENABLE_FFMPEG_CMDS
-        enc_enabled = Config.ENABLE_ENCODE
-        com_enabled = Config.ENABLE_COMPRESS
-        wm_enabled = Config.ENABLE_WATERMARK
 
         buttons.data_button(f"FFmpeg Cmds: {'ON' if ff_enabled else 'OFF'}", f"botset toggleonoff ENABLE_FFMPEG_CMDS {'off' if ff_enabled else 'on'}", position="header")
-        buttons.data_button(f"Encode: {'ON' if enc_enabled else 'OFF'}", f"botset toggleonoff ENABLE_ENCODE {'off' if enc_enabled else 'on'}")
-        buttons.data_button(f"Compress: {'ON' if com_enabled else 'OFF'}", f"botset toggleonoff ENABLE_COMPRESS {'off' if com_enabled else 'on'}")
-        buttons.data_button(f"Watermark: {'ON' if wm_enabled else 'OFF'}", f"botset toggleonoff ENABLE_WATERMARK {'off' if wm_enabled else 'on'}")
+        buttons.data_button("Blocked Commands 🚫", "botset blocked_ff", position="header")
 
         buttons.data_button("Add/Edit FFmpeg Cmds", "botset editff edit")
         buttons.data_button("Delete Specific Preset", "botset delff open")
         buttons.data_button("Reset FFmpeg Cmds", "botset resetff")
         buttons.data_button("Back", "botset back")
         buttons.data_button("Close", "botset close", style=ButtonStyle.DANGER)
+    elif key == "blocked_ff":
+        enc_enabled = Config.ENABLE_ENCODE
+        com_enabled = Config.ENABLE_COMPRESS
+        wm_enabled = Config.ENABLE_WATERMARK
+
+        buttons.data_button(f"Watermark: {'✓ ON (Allowed)' if wm_enabled else '✕ OFF (Blocked)'}", f"botset toggle_block_ff ENABLE_WATERMARK {'off' if wm_enabled else 'on'}")
+        buttons.data_button(f"Compress: {'✓ ON (Allowed)' if com_enabled else '✕ OFF (Blocked)'}", f"botset toggle_block_ff ENABLE_COMPRESS {'off' if com_enabled else 'on'}")
+        buttons.data_button(f"Encode: {'✓ ON (Allowed)' if enc_enabled else '✕ OFF (Blocked)'}", f"botset toggle_block_ff ENABLE_ENCODE {'off' if enc_enabled else 'on'}")
+
+        buttons.data_button("Back", "botset ffmpegcmds", position="footer")
+        buttons.data_button("Close", "botset close", position="footer", style=ButtonStyle.DANGER)
+        msg = "<b>🚫 Blocked Commands Management</b>\n\n<blockquote>Independently enable or disable Watermark, Compress, and Encode options. If an option is disabled (blocked), users will be restricted from configuring or executing that command.</blockquote>"
         ff_display = ""
         ff_items = list(Config.FFMPEG_CMDS.items()) if Config.FFMPEG_CMDS and isinstance(Config.FFMPEG_CMDS, dict) else []
         page_items = ff_items[start : start + 5]
@@ -1518,6 +1525,7 @@ async def edit_bot_settings(client, query):
         "setlimit",
         "ffmpegcmds",
         "dumpcmds",
+        "blocked_ff",
     ] or data[
         1
     ].startswith("nzbser"):
@@ -1685,6 +1693,16 @@ async def edit_bot_settings(client, query):
         key = data[2]
         value = data[3]
         await toggle_onoff_var(client, query, message, key, value)
+    elif data[1] == "blocked_ff":
+        await query.answer()
+        await update_buttons(message, "blocked_ff")
+    elif data[1] == "toggle_block_ff":
+        await query.answer()
+        var_key = data[2]
+        bool_val = data[3] == "on"
+        Config.set(var_key, bool_val)
+        await database.update_config({var_key: bool_val})
+        await update_buttons(message, "blocked_ff")
     elif data[1] == "showvar":
         key = data[2]
         await show_var_value(client, query, key)
