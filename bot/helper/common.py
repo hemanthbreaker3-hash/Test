@@ -1894,10 +1894,14 @@ class TaskConfig:
                 )
             except Exception as e:
                 LOGGER.warning(f"Failed to send planner DM: {e}")
+                group_buttons = ButtonMaker()
+                if Config.BASE_URL:
+                    planner_url = f"{Config.BASE_URL.rstrip('/')}/app/planner?mid={self.mid}&user_id={self.user_id}"
+                    group_buttons.url_button("🧩 Open Merge Planner", planner_url)
                 dm_msg = await send_message(
                     self.message,
                     planner_msg_text,
-                    buttons.build_menu(1),
+                    group_buttons.build_menu(1),
                 )
 
             async def on_save(p_data):

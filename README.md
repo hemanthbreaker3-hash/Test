@@ -279,6 +279,41 @@ Then tune the optional behavior from `config_sample.py`.
 </details>
 
 <details>
+   <summary>How to Get & Set BASE_URL (HTTPS URL on VPS)</summary>
+
+   Telegram requires a valid **HTTPS** URL (starting with `https://`) for Telegram Web Apps (e.g. Torrent Selection, Merge Planner, Watermark positioning).
+
+   ### Option 1: Automatic Cloudflare Tunnel (docker-compose)
+   When using Docker Compose, a `cloudflared` tunnel runs automatically.
+   Get your HTTPS URL by running:
+   ```bash
+   docker compose logs tunnel | grep -oE 'https://[a-zA-Z0-9-]+\.trycloudflare\.com'
+   ```
+   Copy the URL (e.g., `https://random-name.trycloudflare.com`) and set it as `BASE_URL` in `config.py` or via Bot Settings.
+
+   ### Option 2: VPS Manual Cloudflare Quick Tunnel (Free HTTPS)
+   If running on a VPS without Docker, install `cloudflared` and expose local port `8080`:
+   ```bash
+   # Download and install cloudflared on Linux VPS
+   curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+   dpkg -i cloudflared.deb
+
+   # Run cloudflared tunnel pointing to web server (default port 8080)
+   cloudflared tunnel --url http://127.0.0.1:8080
+   ```
+   `cloudflared` will print your public HTTPS URL (e.g. `https://xxxx.trycloudflare.com`).
+   Set `BASE_URL = "https://xxxx.trycloudflare.com"` in `config.py`.
+
+   ### Option 3: Custom Domain with SSL (Nginx / Caddy / Reverse Proxy)
+   If you have a domain pointing to your VPS IP:
+   ```bash
+   # Caddy reverse proxy example (automatically manages HTTPS certificates)
+   caddy reverse-proxy --from yourdomain.com --to 127.0.0.1:8080
+   ```
+   Then set `BASE_URL = "https://yourdomain.com"` in `config.py`.
+</details>
+
+<details>
    <summary>Integrations available in config</summary>
 
    The sample config also covers:

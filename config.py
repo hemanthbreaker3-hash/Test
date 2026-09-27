@@ -11,7 +11,7 @@ ALLDEBRID_API_KEY = ""
 ALLDEBRID_NO_SEED_TIMEOUT = 180
 AS_DOCUMENT = False
 AUTHORIZED_CHATS = ""
-BASE_URL = "https://mathematical-pursuit-college-instant.trycloudflare.com/?utm_source=chatgpt.com"
+BASE_URL = ""
 HELPER_TOKENS = ""
 HELPER_STRINGS = ""
 STREAM_TOKENS = ""
