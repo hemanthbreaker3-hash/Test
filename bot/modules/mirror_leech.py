@@ -965,16 +965,13 @@ async def planner_callback(client, query):
 
     if not p_data:
         for k, v in list(planner_tasks.items()) + list(planner_store.items()):
-            if str(v.get("mid")) == str(mid) and str(v.get("user_id")) == str(user_id):
+            if str(v.get("mid")) == str(mid):
                 p_data = v
                 key = k
                 break
 
     if not p_data:
         return await query.answer("Planner session expired or not found!", show_alert=True)
-
-    if query.from_user.id != p_data.get("user_id"):
-        return await query.answer("This planner session belongs to another user!", show_alert=True)
 
     elif cmd == "page":
         target_page = int(data[3])
@@ -1118,7 +1115,7 @@ async def start_merge_callback(client, query):
     if not p_data:
         all_sessions = list(planner_tasks.items()) + list(planner_store.items())
         for k, v in all_sessions:
-            if str(v.get("mid")) == str(mid) and str(v.get("user_id")) == str(user_id):
+            if str(v.get("mid")) == str(mid):
                 p_data = v
                 key = k
                 break
@@ -1126,8 +1123,9 @@ async def start_merge_callback(client, query):
     if not p_data:
         return await query.answer("Planner session expired or not found!", show_alert=True)
 
-    if not p_data.get("saved"):
-        p_data["saved"] = True
+    p_data["saved"] = True
+    planner_tasks[key] = p_data
+    planner_store[key] = p_data
 
     await query.answer("Starting merge...")
     fut = p_data.get("future")

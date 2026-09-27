@@ -151,9 +151,7 @@ class TaskListener(TaskConfig):
                         if (g_chat, g_thread) not in start_dests:
                             start_dests.append((g_chat, g_thread))
 
-        for d_chat, d_thread in start_dests:
-            if d_chat and d_chat != self.message.chat.id:
-                await send_message(d_chat, start_dump_msg, message_thread_id=d_thread)
+        # Exclude task started notifications from dump chats
         if (
             self.is_super_chat
             and (Config.INC_TASK_NOTIFY or Config.INC_TASK_RESUME)
