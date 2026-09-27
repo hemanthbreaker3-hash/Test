@@ -438,14 +438,14 @@
     }
 
     async function loadPlanner() {
-      if (!mid || !user_id) {
+      if (!mid && !user_id) {
         document.getElementById('loading').style.display = 'none';
         showStatus('Missing session parameters (mid/user_id).', 'error');
         return;
       }
 
       try {
-        const resp = await fetch(`/api/planner/data?mid=${mid}&user_id=${user_id}`);
+        const resp = await fetch(`/api/planner/data?mid=${encodeURIComponent(mid)}&user_id=${encodeURIComponent(user_id)}`);
         if (!resp.ok) {
           const errData = await resp.json().catch(() => ({}));
           document.getElementById('loading').style.display = 'none';
@@ -541,6 +541,7 @@
           <div class="controls">
             <button class="btn-ctrl" ${globalIdx === 0 ? 'disabled' : ''} onclick="moveItem(${globalIdx}, -1)" title="Move Up">▲</button>
             <button class="btn-ctrl" ${globalIdx === totalFiles - 1 ? 'disabled' : ''} onclick="moveItem(${globalIdx}, 1)" title="Move Down">▼</button>
+            <button class="btn-ctrl" style="background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-color: rgba(239, 68, 68, 0.3);" onclick="removeSingleFile(${globalIdx})" title="Remove File">❌</button>
           </div>
         `;
         listEl.appendChild(li);
@@ -560,6 +561,15 @@
         currentPage++;
         renderList();
       }
+    }
+
+    function removeSingleFile(globalIdx) {
+      if (globalIdx < 0 || globalIdx >= fileItems.length) return;
+      const removed = fileItems.splice(globalIdx, 1);
+      if (fileItems.length < 2) {
+        showStatus('Warning: Need at least 2 files to perform video merge.', 'info');
+      }
+      renderList();
     }
 
     function moveItem(globalIdx, dir) {

@@ -1910,8 +1910,10 @@ class TaskConfig:
                     global_idx = start_idx + idx
                     up_cb = f"plcb move {p_info['mid']} {global_idx} -1 {page}" if global_idx > 0 else "plcb dummy"
                     dn_cb = f"plcb move {p_info['mid']} {global_idx} 1 {page}" if global_idx < total_files - 1 else "plcb dummy"
+                    rm_cb = f"plcb rmfile {p_info['mid']} {global_idx} {page}"
                     buttons.data_button(f"#{global_idx + 1} ⬆️", up_cb)
                     buttons.data_button(f"#{global_idx + 1} ⬇️", dn_cb)
+                    buttons.data_button(f"❌ #{global_idx + 1}", rm_cb)
 
                 if total_pages > 1:
                     prev_page = page - 1 if page > 1 else total_pages

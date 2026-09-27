@@ -935,6 +935,24 @@ async def planner_callback(client, query):
             msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=target_page)
             await edit_message(p_data["msg"], msg_text, markup)
 
+    elif cmd == "rmfile":
+        idx = int(data[3])
+        curr_page = int(data[4]) if len(data) > 4 else p_data.get("page", 1)
+        files = p_data.get("files", [])
+        if 0 <= idx < len(files):
+            removed_file = files.pop(idx)
+            if len(files) < 2:
+                p_data["files"] = files
+                await query.answer(f"Removed '{removed_file[:20]}'. Need at least 2 files to merge!", show_alert=True)
+            else:
+                p_data["files"] = files
+                await query.answer(f"Removed '{removed_file[:20]}'")
+            planner_tasks[key] = p_data
+            planner_store[key] = p_data
+            if "format_ui" in p_data and "msg" in p_data:
+                msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=curr_page)
+                await edit_message(p_data["msg"], msg_text, markup)
+
     elif cmd == "move":
         idx = int(data[3])
         direction = int(data[4])
