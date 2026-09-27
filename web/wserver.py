@@ -295,13 +295,20 @@ async def mini_planner(request: Request):
 @app.get("/api/planner/data")
 async def get_planner_data(mid: str, user_id: str):
     key = f"{mid}_{user_id}"
-    data = planner_store.get(key)
-    if not data:
-        from bot import planner_tasks
-        data = planner_tasks.get(key)
+    from bot import planner_tasks
+    data = planner_tasks.get(key) or planner_store.get(key)
     if not data:
         return JSONResponse({"error": "Planner session not found or expired"}, status_code=404)
-    return JSONResponse(data)
+    resp_data = {
+        "mid": data.get("mid"),
+        "user_id": data.get("user_id"),
+        "files": data.get("files", []),
+        "output_filename": data.get("output_filename", ""),
+        "saved": data.get("saved", False),
+        "created_at": data.get("created_at", 0),
+        "timeout_seconds": data.get("timeout_seconds", 600),
+    }
+    return JSONResponse(resp_data)
 
 
 @app.post("/api/planner/save")
@@ -324,6 +331,10 @@ async def save_planner_data(request: Request):
     planner_store[key] = data
     planner_tasks[key] = data
 
+    fut = data.get("future")
+    if fut and not fut.done():
+        fut.set_result(True)
+
     if "on_save_cb" in data and callable(data["on_save_cb"]):
         try:
             await data["on_save_cb"](data)
@@ -344,11 +355,16 @@ async def delete_planner_data(request: Request):
     planner_store.pop(key, None)
     data = planner_tasks.pop(key, None)
 
-    if data and "on_delete_cb" in data and callable(data["on_delete_cb"]):
-        try:
-            await data["on_delete_cb"](data)
-        except Exception as e:
-            LOGGER.error(f"Error executing planner on_delete_cb: {e}")
+    if data:
+        fut = data.get("future")
+        if fut and not fut.done():
+            fut.set_result(False)
+
+        if "on_delete_cb" in data and callable(data["on_delete_cb"]):
+            try:
+                await data["on_delete_cb"](data)
+            except Exception as e:
+                LOGGER.error(f"Error executing planner on_delete_cb: {e}")
 
     return JSONResponse({"success": True})
 

@@ -1859,6 +1859,7 @@ class TaskConfig:
             file_map = {ospath.basename(f): f for f in v_files}
             file_names = list(file_map.keys())
 
+            from time import time
             planner_info = {
                 "mid": self.mid,
                 "user_id": self.user_id,
@@ -1867,6 +1868,8 @@ class TaskConfig:
                 "output_filename": out_filename,
                 "saved": False,
                 "future": fut,
+                "created_at": time(),
+                "timeout_seconds": 600,
             }
             planner_tasks[key] = planner_info
 
@@ -1927,8 +1930,8 @@ class TaskConfig:
             planner_info["on_delete_cb"] = on_delete
 
             try:
-                from asyncio import wait_for
-                res = await wait_for(fut, timeout=300)
+                from asyncio import wait_for, TimeoutError as AsyncTimeoutError
+                res = await wait_for(fut, timeout=600)
                 if res and planner_info.get("saved"):
                     ordered_names = planner_info.get("files", [])
                     reordered_v_files = []
@@ -1941,8 +1944,28 @@ class TaskConfig:
                     v_files = reordered_v_files
                     if p_out := planner_info.get("output_filename"):
                         out_filename = p_out
+            except AsyncTimeoutError:
+                LOGGER.info(f"Merge Planner timed out after 10 min for {key}. Auto-saving default configuration.")
+                planner_info["saved"] = True
+                ordered_names = planner_info.get("files", file_names)
+                reordered_v_files = []
+                for fn in ordered_names:
+                    if fn in file_map:
+                        reordered_v_files.append(file_map[fn])
+                for orig in v_files:
+                    if orig not in reordered_v_files:
+                        reordered_v_files.append(orig)
+                v_files = reordered_v_files
+                if p_out := planner_info.get("output_filename"):
+                    out_filename = p_out
+                with suppress(Exception):
+                    await edit_message(
+                        dm_msg,
+                        f"<b>⏰ Merge Planner Timed Out (10 min)</b>\n\n"
+                        f"Automatically proceeding with current file order and default output: <code>{escape(out_filename)}</code>"
+                    )
             except Exception as e:
-                LOGGER.error(f"Error in Mini Planner execution: {e}")
+                LOGGER.error(f"Error in Planner execution: {e}")
             finally:
                 planner_tasks.pop(key, None)
 
