@@ -4,7 +4,7 @@ from pyrogram.enums import ButtonStyle
 URL_SCHEMES = ("http://", "https://", "tg://")
 
 
-def _btn_style(style=None, key=None):
+def _btn_style(style=None):
     if isinstance(style, str):
         st_upper = style.upper()
         if st_upper == "PRIMARY":
@@ -15,51 +15,7 @@ def _btn_style(style=None, key=None):
             return ButtonStyle.DANGER
     if style in (ButtonStyle.DANGER, ButtonStyle.SUCCESS, ButtonStyle.PRIMARY):
         return style
-
-    if key and isinstance(key, str):
-        key_lower = key.lower()
-        if any(
-            w in key_lower
-            for w in (
-                "cancel",
-                "close",
-                "stop",
-                "delete",
-                "remove",
-                "exit",
-                "no",
-                "clear",
-                "reset",
-                "disable",
-                "off",
-                "back",
-                "scancel",
-                "ccancel",
-            )
-        ):
-            return ButtonStyle.DANGER
-        if any(
-            w in key_lower
-            for w in (
-                "done",
-                "confirm",
-                "save",
-                "yes",
-                "accept",
-                "start",
-                "activate",
-                "enable",
-                "on",
-                "submit",
-                "ok",
-                "complete",
-                "refresh",
-                "sdone",
-            )
-        ):
-            return ButtonStyle.SUCCESS
-
-    return ButtonStyle.PRIMARY
+    return None
 
 
 def valid_url(link):
@@ -91,21 +47,17 @@ class ButtonMaker:
 
             LOGGER.warning(f"dropping button {key!r} with unusable url {link!r}")
             return
-        btn_kwargs = {
-            "text": key,
-            "url": safe,
-            "style": _btn_style(style, key),
-        }
+        btn_kwargs = {"text": key, "url": safe}
+        if st := _btn_style(style):
+            btn_kwargs["style"] = st
         self.buttons[position if position in self.buttons else "default"].append(
             InlineKeyboardButton(**btn_kwargs)
         )
 
     def web_app_button(self, key, link, position=None, style=None):
-        btn_kwargs = {
-            "text": key,
-            "web_app": WebAppInfo(url=link),
-            "style": _btn_style(style, key),
-        }
+        btn_kwargs = {"text": key, "web_app": WebAppInfo(url=link)}
+        if st := _btn_style(style):
+            btn_kwargs["style"] = st
         self.buttons[position if position in self.buttons else "default"].append(
             InlineKeyboardButton(**btn_kwargs)
         )
@@ -121,11 +73,9 @@ class ButtonMaker:
                     f"Callback data exceeds 64 bytes limit ({len(encoded)}): {btn_data}"
                 )
                 btn_data = encoded[:64].decode("utf-8", errors="ignore")
-        btn_kwargs = {
-            "text": str(key),
-            "callback_data": btn_data,
-            "style": _btn_style(style, key),
-        }
+        btn_kwargs = {"text": str(key), "callback_data": btn_data}
+        if st := _btn_style(style):
+            btn_kwargs["style"] = st
         self.buttons[position if position in self.buttons else "default"].append(
             InlineKeyboardButton(**btn_kwargs)
         )
