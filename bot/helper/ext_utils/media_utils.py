@@ -1408,3 +1408,91 @@ class FFMpeg:
                 await cmd_exec(cmd)
 
         return f_path
+
+
+async def apply_thumbnail_watermark(thumb_path: str, user_dict: dict) -> str:
+    import os
+    if not thumb_path or not await aiopath.exists(str(thumb_path)):
+        return thumb_path
+
+    wm_text = user_dict.get("THUMB_WM_TEXT") or user_dict.get("WM_TEXT") or ""
+    wm_img = user_dict.get("THUMB_WM_IMAGE") or user_dict.get("WM_IMAGE") or ""
+    wm_size = user_dict.get("THUMB_WM_SIZE") or user_dict.get("WM_SIZE") or "30"
+    wm_pos = user_dict.get("THUMB_WM_POSITION") or user_dict.get("WM_POSITION") or "Top-Left"
+
+    if not wm_text and not wm_img:
+        return thumb_path
+
+    try:
+        def _apply():
+            with Image.open(thumb_path) as base_img:
+                base_img = base_img.convert("RGBA")
+                w, h = base_img.size
+
+                if wm_img and os.path.exists(str(wm_img)):
+                    with Image.open(wm_img) as watermark:
+                        watermark = watermark.convert("RGBA")
+                        scale_pct = 20
+                        try:
+                            scale_pct = int(str(wm_size).replace("%", "").strip())
+                        except ValueError:
+                            scale_pct = 20
+                        wm_w = int(w * (scale_pct / 100.0))
+                        aspect = watermark.height / watermark.width
+                        wm_h = int(wm_w * aspect)
+                        watermark = watermark.resize(
+                            (max(1, wm_w), max(1, wm_h)),
+                            Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS,
+                        )
+
+                        x, y = 10, 10
+                        if "Center" in wm_pos:
+                            x = (w - wm_w) // 2
+                        elif "Right" in wm_pos:
+                            x = w - wm_w - 10
+                        if "Center" in wm_pos and "Top" not in wm_pos and "Bottom" not in wm_pos:
+                            y = (h - wm_h) // 2
+                        elif "Bottom" in wm_pos:
+                            y = h - wm_h - 10
+
+                        base_img.paste(watermark, (x, y), watermark)
+
+                elif wm_text:
+                    from PIL import ImageDraw, ImageFont
+                    draw = ImageDraw.Draw(base_img)
+                    try:
+                        font_size = int(str(wm_size).strip())
+                    except ValueError:
+                        font_size = max(16, int(h * 0.05))
+                    try:
+                        font = ImageFont.truetype("arial.ttf", font_size)
+                    except Exception:
+                        font = ImageFont.load_default()
+
+                    bbox = draw.textbbox((0, 0), wm_text, font=font)
+                    text_w = bbox[2] - bbox[0]
+                    text_h = bbox[3] - bbox[1]
+
+                    x, y = 15, 15
+                    pos_lower = wm_pos.lower()
+                    if "center" in pos_lower and "top" not in pos_lower and "bottom" not in pos_lower and "left" not in pos_lower and "right" not in pos_lower:
+                        x = (w - text_w) // 2
+                        y = (h - text_h) // 2
+                    else:
+                        if "center" in pos_lower:
+                            x = (w - text_w) // 2
+                        elif "right" in pos_lower:
+                            x = w - text_w - 15
+                        if "bottom" in pos_lower:
+                            y = h - text_h - 15
+
+                    draw.text((x, y), wm_text, fill=(255, 255, 255, 230), font=font)
+
+                out_path = f"{thumb_path}_wm.jpg"
+                base_img.convert("RGB").save(out_path, "JPEG", quality=90)
+                return out_path
+
+        return await sync_to_async(_apply)
+    except Exception as e:
+        LOGGER.warning(f"Error applying thumbnail watermark: {e}")
+        return thumb_path

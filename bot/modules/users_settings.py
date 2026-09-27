@@ -398,6 +398,21 @@ user_settings_text = {
         "Font size for text watermark or width for image watermark.",
         "<blockquote>Send Font Size (e.g. 24, 30) or Image Width (e.g. 150, 200).\n⏱️ <b>Time Left:</b> <code>60 sec</code></blockquote>",
     ),
+    "THUMB_WM_TEXT": (
+        "String",
+        "Thumbnail watermark display text.",
+        "<blockquote>Send Thumbnail Watermark Text.\n⏱️ <b>Time Left:</b> <code>60 sec</code></blockquote>",
+    ),
+    "THUMB_WM_SIZE": (
+        "Number",
+        "Font size or scale percentage for thumbnail watermark.",
+        "<blockquote>Send Thumbnail Watermark size/font size (e.g. 24, 30).\n⏱️ <b>Time Left:</b> <code>60 sec</code></blockquote>",
+    ),
+    "THUMB_WM_IMAGE": (
+        "Photo or Image URL",
+        "Thumbnail watermark overlay image.",
+        "<blockquote>Send photo or Image URL for thumbnail watermark.\n⏱️ <b>Time Left:</b> <code>60 sec</code></blockquote>",
+    ),
 }
 
 
@@ -597,20 +612,6 @@ async def get_user_settings(from_user, stype="main"):
                 "Enable Media Group", f"userset {user_id} tog MEDIA_GROUP t"
             )
             media_group = "Disabled"
-        if (
-            user_dict.get("AUTO_THUMBNAIL", False)
-            or "AUTO_THUMBNAIL" not in user_dict
-            and Config.AUTO_THUMBNAIL
-        ):
-            buttons.data_button(
-                "Disable Auto Thumbnail", f"userset {user_id} tog AUTO_THUMBNAIL f"
-            )
-            auto_thumb = "Enabled"
-        else:
-            buttons.data_button(
-                "Enable Auto Thumbnail", f"userset {user_id} tog AUTO_THUMBNAIL t"
-            )
-            auto_thumb = "Disabled"
         buttons.data_button(
             "Thumbnail Layout", f"userset {user_id} menu THUMBNAIL_LAYOUT"
         )
@@ -669,13 +670,17 @@ async def get_user_settings(from_user, stype="main"):
         has_thumb = await aiopath.exists(thumbpath)
         cur_mode = user_dict.get("THUMBNAIL_MODE", "custom" if has_thumb else "none")
 
+        a_state = "✓ " if cur_mode == "auto" else ""
         c_state = "✓ " if cur_mode == "custom" else ""
-        n_state = "✓ " if cur_mode == "none" else ""
         r_state = "✓ " if cur_mode == "random" else ""
+        n_state = "✓ " if cur_mode == "none" else ""
 
+        buttons.data_button(f"{a_state}Auto Thumbnail", f"userset {user_id} thumb_mode auto")
         buttons.data_button(f"{c_state}Custom Thumbnail", f"userset {user_id} thumb_mode custom")
-        buttons.data_button(f"{n_state}No Thumbnail", f"userset {user_id} thumb_mode none")
         buttons.data_button(f"{r_state}Random Thumbnail", f"userset {user_id} thumb_mode random")
+        buttons.data_button(f"{n_state}No Thumbnail", f"userset {user_id} thumb_mode none")
+
+        buttons.data_button("🖼️ Thumbnail Watermark", f"userset {user_id} thumb_wm_menu")
 
         if cur_mode == "custom" and has_thumb:
             buttons.data_button("View Thumb", f"userset {user_id} view THUMBNAIL", "header")
@@ -697,6 +702,29 @@ async def get_user_settings(from_user, stype="main"):
 • <b>Custom Thumb Status:</b> <b>{thumb_status}</b></blockquote>
 
 Select thumbnail option for Telegram uploads:"""
+        btns = buttons.build_menu(2)
+
+    elif stype == "thumb_wm_menu":
+        wm_text = user_dict.get("THUMB_WM_TEXT") or user_dict.get("WM_TEXT")
+        wm_size = user_dict.get("THUMB_WM_SIZE") or user_dict.get("WM_SIZE") or "30"
+        wm_img = user_dict.get("THUMB_WM_IMAGE") or user_dict.get("WM_IMAGE")
+        wm_pos = user_dict.get("THUMB_WM_POSITION") or user_dict.get("WM_POSITION") or "Top-Left"
+
+        buttons.data_button("Watermark Text", f"userset {user_id} menu THUMB_WM_TEXT")
+        buttons.data_button("Watermark Size", f"userset {user_id} menu THUMB_WM_SIZE")
+        buttons.data_button("Photo / Image", f"userset {user_id} file THUMB_WM_IMAGE")
+        buttons.data_button("📍 Position", f"userset {user_id} thumb_wm_pos_select")
+
+        buttons.data_button("◀️ Back", f"userset {user_id} thumb_select", "footer")
+        buttons.data_button("❌ Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER)
+
+        text = f"""<b>🖼️ Thumbnail Watermark Settings</b>
+
+<blockquote>• <b>User:</b> {user_name}
+• <b>Watermark Text:</b> <code>{escape(str(wm_text or 'Not Set'))}</code>
+• <b>Watermark Size:</b> <code>{escape(str(wm_size))}</code>
+• <b>Photo/Image:</b> <code>{escape(str(wm_img or 'Not Set'))}</code>
+• <b>Position:</b> <b>{escape(str(wm_pos))}</b></blockquote>"""
         btns = buttons.build_menu(2)
 
     elif stype == "enc_com_wm":
@@ -2171,6 +2199,7 @@ async def edit_user_settings(client, query):
         "mirror",
         "leech",
         "thumb_select",
+        "thumb_wm_menu",
         "lfont",
         "vtools",
         "uphoster",
@@ -2257,6 +2286,28 @@ async def edit_user_settings(client, query):
             buttons.data_button("◀️ Back", f"userset {user_id} watermark_menu", "footer")
             buttons.data_button("❌ Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER)
             await edit_message(message, "<b>🎨 Select Text Watermark Color:</b>", buttons.build_menu(2))
+    elif data[2] == "thumb_wm_pos_select":
+        await query.answer()
+        user_dict = user_data.get(user_id, {})
+        if len(data) > 3:
+            new_pos = data[3]
+            update_user_ldata(user_id, "THUMB_WM_POSITION", new_pos)
+            await database.update_user_data(user_id)
+            await update_user_settings(query, "thumb_wm_menu")
+        else:
+            curr_pos = user_dict.get("THUMB_WM_POSITION") or user_dict.get("WM_POSITION") or "Top-Left"
+            buttons = ButtonMaker()
+            positions = [
+                "Top-Left", "Top-Center", "Top-Right",
+                "Center-Left", "Center", "Center-Right",
+                "Bottom-Left", "Bottom-Center", "Bottom-Right"
+            ]
+            for pos in positions:
+                state = "✓ " if pos == curr_pos else ""
+                buttons.data_button(f"{state}{pos}", f"userset {user_id} thumb_wm_pos_select {pos}")
+            buttons.data_button("◀️ Back", f"userset {user_id} thumb_wm_menu", "footer")
+            buttons.data_button("❌ Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER)
+            await edit_message(message, "<b>📍 Select Thumbnail Watermark Position:</b>", buttons.build_menu(3))
     elif data[2] == "wm_pos_select":
         await query.answer()
         user_dict = user_data.get(user_id, {})

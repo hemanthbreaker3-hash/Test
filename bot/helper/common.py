@@ -1850,6 +1850,93 @@ class TaskConfig:
         else:
             out_filename = out_base
 
+        if getattr(self, "merge_mode", "normal") == "advanced" and len(v_files) > 1:
+            from bot import planner_tasks, bot_loop
+            key = f"{self.mid}_{self.user_id}"
+            fut = bot_loop.create_future()
+
+            file_map = {ospath.basename(f): f for f in v_files}
+            file_names = list(file_map.keys())
+
+            planner_info = {
+                "mid": self.mid,
+                "user_id": self.user_id,
+                "files": file_names,
+                "file_map": file_map,
+                "output_filename": out_filename,
+                "saved": False,
+                "future": fut,
+            }
+            planner_tasks[key] = planner_info
+
+            buttons = ButtonMaker()
+            if Config.BASE_URL:
+                planner_url = f"{Config.BASE_URL.rstrip('/')}/app/planner?mid={self.mid}&user_id={self.user_id}"
+                buttons.web_app_button("🧩 Open Mini Planner", planner_url)
+
+            planner_msg_text = (
+                f"<b>🧩 Mini Merge Planner</b>\n\n"
+                f"• <b>Default Output:</b> <code>{escape(out_filename)}</code>\n"
+                f"• <b>Files to Merge ({len(v_files)}):</b>\n"
+                + "\n".join([f"{idx + 1}. {escape(fn)}" for idx, fn in enumerate(file_names)])
+                + "\n\n<i>Open the Mini App below to reorder files or edit output filename.</i>"
+            )
+
+            try:
+                dm_msg = await TgClient.bot.send_message(
+                    chat_id=self.user_id,
+                    text=planner_msg_text,
+                    reply_markup=buttons.build_menu(1),
+                )
+            except Exception as e:
+                LOGGER.warning(f"Failed to send planner DM: {e}")
+                dm_msg = await send_message(
+                    self.message,
+                    planner_msg_text,
+                    buttons.build_menu(1),
+                )
+
+            async def on_save(p_data):
+                b_save = ButtonMaker()
+                b_save.data_button("🚀 Start Merging", f"startmerge {self.mid}")
+                updated_files = p_data.get("files", file_names)
+                updated_out = p_data.get("output_filename", out_filename)
+                save_text = (
+                    f"<b>🧩 Mini Merge Planner (Saved)</b>\n\n"
+                    f"• <b>Configured Output:</b> <code>{escape(updated_out)}</code>\n"
+                    f"• <b>Configured File Order:</b>\n"
+                    + "\n".join([f"{idx + 1}. {escape(fn)}" for idx, fn in enumerate(updated_files)])
+                    + "\n\n<i>Click button below to start merging.</i>"
+                )
+                await edit_message(dm_msg, save_text, b_save.build_menu(1))
+
+            async def on_delete(p_data):
+                if not fut.done():
+                    fut.set_result(False)
+                await edit_message(dm_msg, "<b>🗑️ Mini Merge Planner Deleted. Using default merge order.</b>")
+
+            planner_info["on_save_cb"] = on_save
+            planner_info["on_delete_cb"] = on_delete
+
+            try:
+                res = await fut
+                if res and planner_info.get("saved"):
+                    ordered_names = planner_info.get("files", [])
+                    reordered_v_files = []
+                    for fn in ordered_names:
+                        if fn in file_map:
+                            reordered_v_files.append(file_map[fn])
+                    for orig in v_files:
+                        if orig not in reordered_v_files:
+                            reordered_v_files.append(orig)
+                    v_files = reordered_v_files
+                    if p_out := planner_info.get("output_filename"):
+                        out_filename = p_out
+            except Exception as e:
+                LOGGER.error(f"Error in Mini Planner execution: {e}")
+            finally:
+                planner_tasks.pop(key, None)
+
         self.name = out_filename
         output_file = ospath.join(work_dir, out_filename)
 

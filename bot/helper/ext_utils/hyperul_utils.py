@@ -17,6 +17,7 @@ from ...core.config_manager import Config
 from ...core.tg_client import TgClient
 from ..telegram_helper.tg_transfer import HypertgTransfer
 from ..ext_utils.media_utils import (
+    apply_thumbnail_watermark,
     format_tg_thumbnail,
     get_audio_thumbnail,
     get_document_type,
@@ -95,28 +96,30 @@ class HypertgUpload(HypertgTransfer):
         has_custom = await aiopath.exists(str(user_perm))
         thumb_mode = self._listener.user_dict.get("THUMBNAIL_MODE", "custom" if has_custom else "none")
 
-        user_custom_thumb = None
-        if thumb_mode == "none":
-            user_custom_thumb = None
-        elif thumb_mode == "custom":
-            if user_thumb and user_thumb != "none" and await aiopath.exists(str(user_thumb)):
-                user_custom_thumb = user_thumb
-            elif self._listener.thumb and self._listener.thumb != "none" and await aiopath.exists(str(self._listener.thumb)):
-                user_custom_thumb = self._listener.thumb
-            elif has_custom:
-                user_custom_thumb = user_perm
-
-        thumb = user_custom_thumb
-
         duration = 0
         width = 480
         height = 320
         artist = ""
         title = ""
-
-        if thumb_mode == "random" and is_video:
+        if is_video:
             duration = (await get_media_info(file_path))[0]
+        elif is_audio:
+            duration, artist, title = await get_media_info(file_path)
+
+        thumb = None
+        if thumb_mode == "auto":
+            thumb = await self._get_auto_thumb(file_path, is_video=is_video, duration=duration, is_audio=is_audio)
+        elif thumb_mode == "custom":
+            if user_thumb and user_thumb != "none" and await aiopath.exists(str(user_thumb)):
+                thumb = user_thumb
+            elif self._listener.thumb and self._listener.thumb != "none" and await aiopath.exists(str(self._listener.thumb)):
+                thumb = self._listener.thumb
+            elif has_custom:
+                thumb = user_perm
+        elif thumb_mode == "random" and is_video:
             thumb = await get_video_thumbnail(file_path, duration)
+        elif thumb_mode == "none":
+            thumb = None
 
         if (
             force_document
@@ -124,12 +127,6 @@ class HypertgUpload(HypertgTransfer):
             or (not is_video and not is_audio and not is_image)
         ):
             key = "documents"
-            if is_video and not duration:
-                duration = (await get_media_info(file_path))[0]
-
-            if thumb_mode == "custom" and (not thumb or not await aiopath.exists(str(thumb))):
-                thumb = await self._get_auto_thumb(file_path, is_video=is_video, duration=duration, is_audio=is_audio)
-
             if thumb and thumb != "none" and await aiopath.exists(str(thumb)):
                 doc_thumb = f"{thumb}_320.jpg"
                 try:
@@ -142,11 +139,6 @@ class HypertgUpload(HypertgTransfer):
                     LOGGER.warning(f"Document thumbnail formatting error: {e}")
         elif is_video:
             key = "videos"
-            if not duration:
-                duration = (await get_media_info(file_path))[0]
-            if thumb_mode == "custom" and (not thumb or not await aiopath.exists(str(thumb))):
-                thumb = await self._get_auto_thumb(file_path, is_video=True, duration=duration)
-
             if thumb and thumb != "none" and await aiopath.exists(str(thumb)):
                 try:
                     with Image.open(thumb) as img:
@@ -156,13 +148,11 @@ class HypertgUpload(HypertgTransfer):
                     pass
         elif is_audio:
             key = "audios"
-            duration, artist, title = await get_media_info(file_path)
-            if thumb_mode == "custom" and (not thumb or not await aiopath.exists(str(thumb))):
-                thumb = await self._get_auto_thumb(file_path, is_audio=True)
         else:
             key = "photos"
 
         if thumb and thumb != "none" and await aiopath.exists(str(thumb)):
+            thumb = await apply_thumbnail_watermark(thumb, self._listener.user_dict)
             formatted_t = await sync_to_async(format_tg_thumbnail, thumb)
             if formatted_t and await aiopath.exists(str(formatted_t)):
                 thumb = formatted_t

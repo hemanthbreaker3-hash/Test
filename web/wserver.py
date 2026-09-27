@@ -194,13 +194,31 @@ http_session = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global aria2, qbittorrent, http_session
-    aria2 = Aria2HttpClient("http://localhost:6800/jsonrpc")
-    qbittorrent = await create_client("http://localhost:8090/api/v2/")
+    try:
+        aria2 = Aria2HttpClient("http://localhost:6800/jsonrpc")
+    except Exception as e:
+        LOGGER.warning(f"Aria2 connection failed in lifespan: {e}")
+    try:
+        qbittorrent = await create_client("http://localhost:8090/api/v2/")
+    except Exception as e:
+        LOGGER.warning(f"Qbittorrent connection failed in lifespan: {e}")
     http_session = ClientSession(auto_decompress=True)
     yield
-    await aria2.close()
-    await qbittorrent.close()
-    await http_session.close()
+    if aria2:
+        try:
+            await aria2.close()
+        except Exception:
+            pass
+    if qbittorrent:
+        try:
+            await qbittorrent.close()
+        except Exception:
+            pass
+    if http_session:
+        try:
+            await http_session.close()
+        except Exception:
+            pass
 
 
 app = FastAPI(lifespan=lifespan)
@@ -260,6 +278,79 @@ async def files(request: Request):
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
+
+planner_store = {}
+
+
+@app.api_route("/app/planner", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def mini_planner(request: Request):
+    response = templates.TemplateResponse(request, "planner.html")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
+@app.get("/api/planner/data")
+async def get_planner_data(mid: str, user_id: str):
+    key = f"{mid}_{user_id}"
+    data = planner_store.get(key)
+    if not data:
+        from bot import planner_tasks
+        data = planner_tasks.get(key)
+    if not data:
+        return JSONResponse({"error": "Planner session not found or expired"}, status_code=404)
+    return JSONResponse(data)
+
+
+@app.post("/api/planner/save")
+async def save_planner_data(request: Request):
+    body = await request.json()
+    mid = body.get("mid")
+    user_id = body.get("user_id")
+    files = body.get("files", [])
+    output_filename = body.get("output_filename", "")
+
+    key = f"{mid}_{user_id}"
+    from bot import planner_tasks
+    data = planner_tasks.get(key) or planner_store.get(key)
+    if not data:
+        return JSONResponse({"error": "Planner session not found"}, status_code=404)
+
+    data["files"] = files
+    data["output_filename"] = output_filename
+    data["saved"] = True
+    planner_store[key] = data
+    planner_tasks[key] = data
+
+    if "on_save_cb" in data and callable(data["on_save_cb"]):
+        try:
+            await data["on_save_cb"](data)
+        except Exception as e:
+            LOGGER.error(f"Error executing planner on_save_cb: {e}")
+
+    return JSONResponse({"success": True})
+
+
+@app.post("/api/planner/delete")
+async def delete_planner_data(request: Request):
+    body = await request.json()
+    mid = body.get("mid")
+    user_id = body.get("user_id")
+
+    key = f"{mid}_{user_id}"
+    from bot import planner_tasks
+    planner_store.pop(key, None)
+    data = planner_tasks.pop(key, None)
+
+    if data and "on_delete_cb" in data and callable(data["on_delete_cb"]):
+        try:
+            await data["on_delete_cb"](data)
+        except Exception as e:
+            LOGGER.error(f"Error executing planner on_delete_cb: {e}")
+
+    return JSONResponse({"success": True})
 
 
 @app.get("/app/watermark", response_class=HTMLResponse)

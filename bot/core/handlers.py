@@ -1,6 +1,6 @@
 # ruff: noqa: F403, F405
 
-from pyrogram.filters import command, regex
+from pyrogram.filters import command, regex, private
 from pyrogram.handlers import CallbackQueryHandler, EditedMessageHandler, MessageHandler
 from pyrogram.types import BotCommand
 
@@ -360,7 +360,7 @@ async def add_handlers():
         MessageHandler(
             task_status,
             filters=command(BotCommands.StatusCommand, case_sensitive=True)
-            & CustomFilters.authorized,
+            & (CustomFilters.authorized | private),
         )
     )
     TgClient.bot.add_handler(
@@ -408,6 +408,9 @@ async def add_handlers():
     )
     TgClient.bot.add_handler(
         CallbackQueryHandler(ht_merge_callback, filters=regex("^htmerge"))
+    )
+    TgClient.bot.add_handler(
+        CallbackQueryHandler(start_merge_callback, filters=regex("^startmerge"))
     )
     TgClient.bot.add_handler(
         MessageHandler(

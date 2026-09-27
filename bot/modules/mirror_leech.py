@@ -865,6 +865,27 @@ async def ht_merge_callback(client, query):
 
 
 
+@new_task
+async def start_merge_callback(client, query):
+    data = query.data.split()
+    mid = int(data[1])
+    user_id = query.from_user.id
+    key = f"{mid}_{user_id}"
+    from bot import planner_tasks
+    p_data = planner_tasks.get(key)
+    if not p_data:
+        return await query.answer("Planner session expired or not found!", show_alert=True)
+    if not p_data.get("saved"):
+        return await query.answer("Please save the planner in Mini App first!", show_alert=True)
+    await query.answer("Starting merge...")
+    fut = p_data.get("future")
+    if fut and not fut.done():
+        fut.set_result(True)
+    await edit_message(query.message, query.message.text.html + "\n\n<b>🚀 Merging Started...</b>")
+
+
+
+
 async def mirror(client, message):
     bot_loop.create_task(Mirror(client, message).new_event())
 

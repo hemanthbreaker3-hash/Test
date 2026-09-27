@@ -2,7 +2,9 @@ from psutil import cpu_percent, virtual_memory, disk_usage
 from time import time
 from asyncio import gather, iscoroutinefunction
 
+from pyrogram.enums import ChatType
 from pyrogram.errors import QueryIdInvalid
+from .. import user_data
 
 from .. import (
     task_dict_lock,
@@ -55,20 +57,31 @@ async def task_status(_, message):
         await auto_delete_message(message, reply_message)
     else:
         text = message.text.split()
-        if len(text) > 1:
-            if text[1] == "me":
-                user_id = message.from_user.id
-            elif text[1].lstrip("-").isdigit():
-                user_id = int(text[1])
+        is_private = message.chat and message.chat.type == ChatType.PRIVATE
+        u_id = message.from_user.id if message.from_user else 0
+
+        if is_private:
+            is_sudo = u_id == Config.OWNER_ID or (u_id in user_data and user_data[u_id].get("SUDO"))
+            if len(text) > 1 and text[1].lstrip("-").isdigit() and is_sudo:
+                target_user_id = int(text[1])
             else:
-                user_id = 0
+                target_user_id = u_id
         else:
-            user_id = 0
-            sid = message.chat.id
-            if obj := intervals["status"].get(sid):
-                obj.cancel()
-                del intervals["status"][sid]
-        await send_status_message(message, user_id)
+            if len(text) > 1:
+                if text[1] == "me":
+                    target_user_id = u_id
+                elif text[1].lstrip("-").isdigit():
+                    target_user_id = int(text[1])
+                else:
+                    target_user_id = 0
+            else:
+                target_user_id = 0
+                sid = message.chat.id
+                if obj := intervals["status"].get(sid):
+                    obj.cancel()
+                    del intervals["status"][sid]
+
+        await send_status_message(message, target_user_id)
         await delete_message(message)
 
 
