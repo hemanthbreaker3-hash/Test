@@ -1057,7 +1057,7 @@ async def planner_callback(client, query):
 @new_task
 async def start_merge_callback(client, query):
     data = query.data.split()
-    mid = int(data[1])
+    mid = data[1] if len(data) > 1 else ""
     user_id = query.from_user.id
     key = f"{mid}_{user_id}"
     from bot import planner_tasks
@@ -1065,15 +1065,19 @@ async def start_merge_callback(client, query):
     p_data = planner_tasks.get(key) or planner_store.get(key)
 
     if not p_data:
-        for k, v in list(planner_tasks.items()) + list(planner_store.items()):
-            if str(v.get("mid")) == str(mid) and str(v.get("user_id")) == str(user_id):
+        all_sessions = list(planner_tasks.items()) + list(planner_store.items())
+        for k, v in all_sessions:
+            if str(v.get("mid")) == str(mid) or str(v.get("user_id")) == str(user_id):
                 p_data = v
+                key = k
                 break
 
     if not p_data:
         return await query.answer("Planner session expired or not found!", show_alert=True)
+
     if not p_data.get("saved"):
-        return await query.answer("Please save the planner in Web App or Telegram first!", show_alert=True)
+        p_data["saved"] = True
+
     await query.answer("Starting merge...")
     fut = p_data.get("future")
     if fut and not fut.done():

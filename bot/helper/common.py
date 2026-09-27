@@ -1927,7 +1927,7 @@ class TaskConfig:
                 buttons.data_button("💾 Save Order", f"plcb save {p_info['mid']}")
                 buttons.data_button("🗑️ Delete Session", f"plcb delete {p_info['mid']}")
 
-                return msg_text, buttons.build_menu(2)
+                return msg_text, buttons.build_menu(3)
 
             planner_msg_text, markup = format_planner_ui(planner_info, is_dm=True)
 
