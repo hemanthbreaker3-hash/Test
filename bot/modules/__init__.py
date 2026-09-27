@@ -35,6 +35,7 @@ from .mirror_leech import (
     seedr_link,
     uphoster,
     ht_merge_callback,
+    planner_callback,
     start_merge_callback,
     auto_task_handler,
 )
@@ -91,6 +92,7 @@ __all__ = [
     "arg_usage",
     "uphoster",
     "ht_merge_callback",
+    "planner_callback",
     "start_merge_callback",
     "auto_task_handler",
     "mirror",
