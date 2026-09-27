@@ -251,9 +251,17 @@ class Mirror(TaskListener):
         )
         if user_auto_merge:
             self.auto_merge = True
+            self.merge_mode = self.user_dict.get("AUTO_MERGE_MODE", "normal")
 
 
-        self.ht_flag = args["-ht"] or "-ht" in self.options
+        has_b_or_m = bool(
+            args.get("-b")
+            or args.get("-m")
+            or "-b" in self.options
+            or "-m" in self.options
+            or self.manual_merge
+        )
+        self.ht_flag = (args["-ht"] or "-ht" in self.options) and has_b_or_m
 
         from ..helper.ext_utils.task_manager import get_task_key
         task_source = self.link or (self.message.reply_to_message.text if self.message.reply_to_message and self.message.reply_to_message.text else "") or self.name
@@ -370,6 +378,7 @@ class Mirror(TaskListener):
                 event_done = bot_loop.create_future()
                 ht_tasks[self.mid] = {
                     "merge": self.auto_merge or self.manual_merge,
+                    "merge_mode": getattr(self, "merge_mode", self.user_dict.get("AUTO_MERGE_MODE", "normal")),
                     "rm_stream": False,
                     "reorder": False,
                     "reorder_aud": [],
@@ -385,17 +394,24 @@ class Mirror(TaskListener):
                 def build_ht_menu(mid):
                     t_info = ht_tasks.get(mid, {})
                     m_on = "✓ ON" if t_info.get("merge") else "OFF"
+                    m_mode = t_info.get("merge_mode", "normal")
                     tr_on = "✓ ON" if t_info.get("trim") else "OFF"
                     ex_on = "✓ ON" if t_info.get("extract") else "OFF"
 
                     buttons = ButtonMaker()
-                    buttons.data_button(f"Merge: {m_on}", f"htmerge merge {mid}")
+                    buttons.data_button(f"Merge: {m_on}", f"htmerge merge {mid}", position="header")
+                    if t_info.get("merge"):
+                        n_st = "✓ " if m_mode == "normal" else ""
+                        a_st = "✓ " if m_mode == "advanced" else ""
+                        buttons.data_button(f"{n_st}Normal Mode", f"htmerge setmode {mid} normal")
+                        buttons.data_button(f"{a_st}Advanced Mode", f"htmerge setmode {mid} advanced")
+
                     buttons.data_button(f"Trim: {tr_on}", f"htmerge trim {mid}")
                     buttons.data_button(f"Extract: {ex_on}", f"htmerge extract {mid}")
                     buttons.data_button("Done", f"htmerge done {mid}", position="footer")
                     return buttons
 
-                initial_merge = "✓ ON" if self.auto_merge or self.manual_merge else "OFF"
+                initial_merge = "✓ ON (Normal Mode)" if self.auto_merge or self.manual_merge else "OFF"
                 prompt_msg = await send_message(
                     self.message,
                     f"<b>Task Received with -ht flag.</b>\nChoose pre-upload options:\n\n• <b>Merge:</b> {initial_merge}\n• <b>Trim:</b> OFF\n• <b>Extract:</b> OFF",
@@ -714,26 +730,48 @@ async def ht_merge_callback(client, query):
 
     def render_ht_menu(mid):
         t_info = ht_tasks.get(mid, {})
+        m_on = "✓ ON" if t_info.get("merge") else "OFF"
+        m_mode = t_info.get("merge_mode", "normal")
+        tr_on = "✓ ON" if t_info.get("trim") else "OFF"
+        ex_on = "✓ ON" if t_info.get("extract") else "OFF"
+
         buttons = ButtonMaker()
-        buttons.data_button(f"Merge: {'✓ ON' if t_info.get('merge') else 'OFF'}", f"htmerge merge {mid}")
-        buttons.data_button(f"Trim: {'✓ ON' if t_info.get('trim') else 'OFF'}", f"htmerge trim {mid}")
-        buttons.data_button(f"Extract: {'✓ ON' if t_info.get('extract') else 'OFF'}", f"htmerge extract {mid}")
+        buttons.data_button(f"Merge: {m_on}", f"htmerge merge {mid}", position="header")
+        if t_info.get("merge"):
+            n_st = "✓ " if m_mode == "normal" else ""
+            a_st = "✓ " if m_mode == "advanced" else ""
+            buttons.data_button(f"{n_st}Normal Mode", f"htmerge setmode {mid} normal")
+            buttons.data_button(f"{a_st}Advanced Mode", f"htmerge setmode {mid} advanced")
+
+        buttons.data_button(f"Trim: {tr_on}", f"htmerge trim {mid}")
+        buttons.data_button(f"Extract: {ex_on}", f"htmerge extract {mid}")
         buttons.data_button("Done", f"htmerge done {mid}", position="footer")
         return buttons
 
     def render_ht_text(mid):
         t_info = ht_tasks.get(mid, {})
+        if not t_info.get("merge"):
+            m_disp = "OFF"
+        else:
+            m_disp = f"ON ({t_info.get('merge_mode', 'normal').title()} Mode)"
         return (
             f"<b>Task Received with -ht flag.</b>\nChoose pre-upload options:\n\n"
-            f"• <b>Merge:</b> {'✓ ON' if t_info.get('merge') else 'OFF'}\n"
+            f"• <b>Merge:</b> {m_disp}\n"
             f"• <b>Trim:</b> {'✓ ON' if t_info.get('trim') else 'OFF'} ({t_info.get('trim_range') or 'Not Set'})\n"
             f"• <b>Extract:</b> {'✓ ON' if t_info.get('extract') else 'OFF'} ({', '.join(t_info.get('extract_types', [])) or 'Not Set'})"
         )
 
-    if data[1] in ["merge"]:
-        key = data[1]
-        task_info[key] = not task_info[key]
-        await query.answer(f"{key.replace('_', ' ').title()} turned {'ON' if task_info[key] else 'OFF'}")
+    if data[1] == "merge":
+        task_info["merge"] = not task_info.get("merge")
+        if task_info["merge"] and "merge_mode" not in task_info:
+            task_info["merge_mode"] = "normal"
+        await query.answer(f"Merge {'ON' if task_info['merge'] else 'OFF'}")
+        await edit_message(query.message, render_ht_text(mid), render_ht_menu(mid).build_menu(2))
+    elif data[1] == "setmode":
+        mode = data[3]
+        task_info["merge"] = True
+        task_info["merge_mode"] = mode
+        await query.answer(f"Selected {mode.title()} Merge Mode")
         await edit_message(query.message, render_ht_text(mid), render_ht_menu(mid).build_menu(2))
     elif data[1] == "trim":
         await query.answer()
@@ -881,7 +919,8 @@ async def start_merge_callback(client, query):
     fut = p_data.get("future")
     if fut and not fut.done():
         fut.set_result(True)
-    await edit_message(query.message, query.message.text.html + "\n\n<b>🚀 Merging Started...</b>")
+    curr_text = query.message.text or query.message.caption or ""
+    await edit_message(query.message, f"{curr_text}\n\n<b>🚀 Merging Started...</b>")
 
 
 

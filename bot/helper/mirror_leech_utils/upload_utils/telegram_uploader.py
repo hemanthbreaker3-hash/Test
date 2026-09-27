@@ -93,23 +93,28 @@ class TelegramUploader:
                 self._listener.user_dict.get(key) or getattr(Config, key, default),
             )
 
-        user_thumb = self._listener.thumb or self._listener.user_dict.get("THUMBNAIL") or f"thumbnails/{self._listener.user_id}.jpg"
-        if user_thumb and user_thumb != "none":
-            if await aiopath.exists(user_thumb):
-                self._thumb = user_thumb
-                self._listener.thumb = user_thumb
-            elif isinstance(user_thumb, str) and user_thumb.startswith(("http://", "https://")):
-                from ...ext_utils.media_utils import download_image_thumb
-                downloaded = await download_image_thumb(user_thumb)
-                if downloaded and await aiopath.exists(downloaded):
-                    self._thumb = downloaded
-                    self._listener.thumb = downloaded
-                else:
-                    self._thumb = None
-            else:
-                self._thumb = None
-        else:
-            self._thumb = None
+        user_perm = self._listener.user_dict.get("THUMBNAIL") or f"thumbnails/{self._listener.user_id}.jpg"
+        has_custom = await aiopath.exists(str(user_perm))
+        thumb_mode = self._listener.user_dict.get("THUMBNAIL_MODE", "custom" if has_custom else "none")
+
+        self._thumb = None
+        if thumb_mode == "custom":
+            user_thumb = self._listener.thumb or self._listener.user_dict.get("THUMBNAIL") or f"thumbnails/{self._listener.user_id}.jpg"
+            if user_thumb and user_thumb != "none":
+                if await aiopath.exists(str(user_thumb)):
+                    self._thumb = user_thumb
+                    self._listener.thumb = user_thumb
+                elif isinstance(user_thumb, str) and user_thumb.startswith(("http://", "https://")):
+                    from ...ext_utils.media_utils import download_image_thumb
+                    downloaded = await download_image_thumb(user_thumb)
+                    if downloaded and await aiopath.exists(downloaded):
+                        self._thumb = downloaded
+                        self._listener.thumb = downloaded
+
+        if self._thumb and self._thumb != "none" and await aiopath.exists(str(self._thumb)):
+            from ...ext_utils.media_utils import apply_thumbnail_watermark
+            self._thumb = await apply_thumbnail_watermark(self._thumb, self._listener.user_dict)
+            self._listener.thumb = self._thumb
 
         # Check for user configured bot tokens
         user_tokens = self._listener.user_dict.get("BOT_TOKENS", [])

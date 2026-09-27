@@ -1919,7 +1919,8 @@ class TaskConfig:
             planner_info["on_delete_cb"] = on_delete
 
             try:
-                res = await fut
+                from asyncio import wait_for
+                res = await wait_for(fut, timeout=300)
                 if res and planner_info.get("saved"):
                     ordered_names = planner_info.get("files", [])
                     reordered_v_files = []

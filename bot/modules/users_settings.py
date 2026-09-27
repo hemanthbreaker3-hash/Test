@@ -641,6 +641,12 @@ async def get_user_settings(from_user, stype="main"):
             f"userset {user_id} tog AUTO_LEECH {'f' if auto_leech else 't'} leech",
         )
 
+        thumb_mode_val = user_dict.get("THUMBNAIL_MODE")
+        if thumb_mode_val == "auto" or (not thumb_mode_val and user_dict.get("AUTO_THUMBNAIL", False)):
+            auto_thumb = "Enabled"
+        else:
+            auto_thumb = "Disabled"
+
         buttons.data_button("◀️ Back", f"userset {user_id} back", "footer")
         buttons.data_button(
             "❌ Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER
@@ -874,7 +880,15 @@ Configure custom video encoding, compression, and watermark overlays for uploads
         buttons.data_button(
             f"Auto Merge: {'✓ ON' if auto_merge else 'OFF'}",
             f"userset {user_id} tog AUTO_MERGE {'f' if auto_merge else 't'} vtools",
+            position="header",
         )
+
+        merge_mode = user_dict.get("AUTO_MERGE_MODE", "normal")
+        if auto_merge:
+            n_st = "✓ " if merge_mode == "normal" else ""
+            a_st = "✓ " if merge_mode == "advanced" else ""
+            buttons.data_button(f"{n_st}Normal Mode", f"userset {user_id} set_merge_mode normal")
+            buttons.data_button(f"{a_st}Advanced Mode", f"userset {user_id} set_merge_mode advanced")
 
         save_files = user_dict.get("SAVE_FILES", False)
         buttons.data_button(
@@ -886,12 +900,12 @@ Configure custom video encoding, compression, and watermark overlays for uploads
         buttons.data_button(
             "❌ Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER
         )
-        btns = buttons.build_menu(1)
+        btns = buttons.build_menu(2)
 
         text = f"""<b>🎬 Video Processing Tools</b>
 
 <blockquote>• <b>User:</b> {user_name}
-• <b>Auto Video Merge:</b> <b>{'Enabled' if auto_merge else 'Disabled'}</b>
+• <b>Auto Video Merge:</b> <b>{'Enabled (' + merge_mode.title() + ' Mode)' if auto_merge else 'Disabled'}</b>
 • <b>Keep Original Files on Merge:</b> <b>{'Enabled' if save_files else 'Disabled'}</b></blockquote>"""
 
     elif stype == "uphoster":
@@ -2693,6 +2707,11 @@ async def edit_user_settings(client, query):
         await update_user_settings(query, stype="leech")
         if Config.DATABASE_URL:
             await database.update_user_data(user_id)
+    elif data[2] == "set_merge_mode":
+        await query.answer()
+        update_user_ldata(user_id, "AUTO_MERGE_MODE", data[3])
+        await update_user_settings(query, stype="vtools")
+        await database.update_user_data(user_id)
     elif data[2] == "split_mode":
         await query.answer()
         update_user_ldata(user_id, "SPLIT_MODE", data[3])

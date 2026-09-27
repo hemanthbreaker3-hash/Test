@@ -93,6 +93,7 @@ queued_dl = {}
 queued_up = {}
 status_dict = {}
 task_dict = {}
+planner_tasks = {}
 rss_dict = {}
 shortener_dict = {}
 categories_dict = {}
