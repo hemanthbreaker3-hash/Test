@@ -1853,6 +1853,7 @@ class TaskConfig:
 
         if getattr(self, "merge_mode", "normal") == "advanced" and len(v_files) > 1:
             from bot import planner_tasks, bot_loop
+            from web.wserver import planner_store
             key = f"{self.mid}_{self.user_id}"
             fut = bot_loop.create_future()
 
@@ -1864,6 +1865,7 @@ class TaskConfig:
                 "mid": self.mid,
                 "user_id": self.user_id,
                 "files": file_names,
+                "orig_files": list(file_names),
                 "file_map": file_map,
                 "output_filename": out_filename,
                 "saved": False,
@@ -1872,40 +1874,57 @@ class TaskConfig:
                 "timeout_seconds": 600,
             }
             planner_tasks[key] = planner_info
+            planner_store[key] = planner_info
 
-            buttons = ButtonMaker()
-            if Config.BASE_URL:
-                planner_url = f"{Config.BASE_URL.rstrip('/')}/app/planner?mid={self.mid}&user_id={self.user_id}"
-                if str(Config.BASE_URL).startswith("https://"):
-                    buttons.web_app_button("🧩 Open Merge Planner", planner_url)
-                else:
-                    buttons.url_button("🧩 Open Merge Planner", planner_url)
+            def format_planner_ui(p_info, is_dm=True):
+                cur_files = p_info.get("files", [])
+                cur_out = p_info.get("output_filename", out_filename)
+                msg_text = (
+                    f"<b>🧩 Merge Planner</b>\n\n"
+                    f"• <b>Output Filename:</b> <code>{escape(cur_out)}</code>\n"
+                    f"• <b>Files to Merge ({len(cur_files)}):</b>\n"
+                    + "\n".join([f"{idx + 1}. {escape(fn)}" for idx, fn in enumerate(cur_files)])
+                    + "\n\n<i>Reorder files below, edit output filename, or open Mini App.</i>"
+                )
+                buttons = ButtonMaker()
+                if Config.BASE_URL:
+                    planner_url = f"{Config.BASE_URL.rstrip('/')}/app/planner?mid={p_info['mid']}&user_id={p_info['user_id']}"
+                    if str(Config.BASE_URL).startswith("https://") and is_dm:
+                        buttons.web_app_button("📱 Open Mini App", planner_url)
+                    else:
+                        buttons.url_button("📱 Open Mini App", planner_url)
 
-            planner_msg_text = (
-                f"<b>🧩 Merge Planner</b>\n\n"
-                f"• <b>Default Output:</b> <code>{escape(out_filename)}</code>\n"
-                f"• <b>Files to Merge ({len(v_files)}):</b>\n"
-                + "\n".join([f"{idx + 1}. {escape(fn)}" for idx, fn in enumerate(file_names)])
-                + "\n\n<i>Open the App below to reorder files or edit output filename.</i>"
-            )
+                for idx in range(len(cur_files)):
+                    up_cb = f"plcb move {p_info['mid']} {idx} -1" if idx > 0 else "plcb dummy"
+                    dn_cb = f"plcb move {p_info['mid']} {idx} 1" if idx < len(cur_files) - 1 else "plcb dummy"
+                    buttons.data_button(f"#{idx + 1} ⬆️", up_cb)
+                    buttons.data_button(f"#{idx + 1} ⬇️", dn_cb)
+
+                buttons.data_button("🔄 Reset Order", f"plcb reset {p_info['mid']}")
+                buttons.data_button("✏️ Rename Output", f"plcb name {p_info['mid']}")
+                buttons.data_button("💾 Save Order", f"plcb save {p_info['mid']}")
+                buttons.data_button("🗑️ Delete Session", f"plcb delete {p_info['mid']}")
+
+                return msg_text, buttons.build_menu(2)
+
+            planner_msg_text, markup = format_planner_ui(planner_info, is_dm=True)
 
             try:
                 dm_msg = await TgClient.bot.send_message(
                     chat_id=self.user_id,
                     text=planner_msg_text,
-                    reply_markup=buttons.build_menu(1),
+                    reply_markup=markup,
                 )
             except Exception as e:
                 LOGGER.warning(f"Failed to send planner DM: {e}")
-                group_buttons = ButtonMaker()
-                if Config.BASE_URL:
-                    planner_url = f"{Config.BASE_URL.rstrip('/')}/app/planner?mid={self.mid}&user_id={self.user_id}"
-                    group_buttons.url_button("🧩 Open Merge Planner", planner_url)
+                planner_msg_text, group_markup = format_planner_ui(planner_info, is_dm=False)
                 dm_msg = await send_message(
                     self.message,
                     planner_msg_text,
-                    group_buttons.build_menu(1),
+                    group_markup,
                 )
+
+            planner_info["msg"] = dm_msg
 
             async def on_save(p_data):
                 b_save = ButtonMaker()
@@ -1928,6 +1947,7 @@ class TaskConfig:
 
             planner_info["on_save_cb"] = on_save
             planner_info["on_delete_cb"] = on_delete
+            planner_info["format_ui"] = format_planner_ui
 
             try:
                 from asyncio import wait_for, TimeoutError as AsyncTimeoutError

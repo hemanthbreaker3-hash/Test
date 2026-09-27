@@ -904,17 +904,150 @@ async def ht_merge_callback(client, query):
 
 
 @new_task
+async def planner_callback(client, query):
+    data = query.data.split()
+    cmd = data[1]
+    user_id = query.from_user.id
+    from bot import planner_tasks
+    from web.wserver import planner_store
+
+    mid = data[2] if len(data) > 2 else ""
+    key = f"{mid}_{user_id}"
+    p_data = planner_tasks.get(key) or planner_store.get(key)
+
+    if not p_data:
+        for k, v in list(planner_tasks.items()) + list(planner_store.items()):
+            if str(v.get("mid")) == str(mid) and str(v.get("user_id")) == str(user_id):
+                p_data = v
+                key = k
+                break
+
+    if not p_data:
+        return await query.answer("Planner session expired or not found!", show_alert=True)
+
+    if query.from_user.id != p_data.get("user_id"):
+        return await query.answer("This planner session belongs to another user!", show_alert=True)
+
+    if cmd == "dummy":
+        return await query.answer()
+
+    elif cmd == "move":
+        idx = int(data[3])
+        direction = int(data[4])
+        target_idx = idx + direction
+        files = p_data.get("files", [])
+        if 0 <= idx < len(files) and 0 <= target_idx < len(files):
+            files[idx], files[target_idx] = files[target_idx], files[idx]
+            p_data["files"] = files
+            planner_tasks[key] = p_data
+            planner_store[key] = p_data
+            await query.answer("File reordered")
+            if "format_ui" in p_data and "msg" in p_data:
+                msg_text, markup = p_data["format_ui"](p_data, is_dm=True)
+                await edit_message(p_data["msg"], msg_text, markup)
+
+    elif cmd == "reset":
+        p_data["files"] = list(p_data.get("orig_files", []))
+        planner_tasks[key] = p_data
+        planner_store[key] = p_data
+        await query.answer("Order reset to default")
+        if "format_ui" in p_data and "msg" in p_data:
+            msg_text, markup = p_data["format_ui"](p_data, is_dm=True)
+            await edit_message(p_data["msg"], msg_text, markup)
+
+    elif cmd == "name":
+        await query.answer()
+        prompt_str = f"<b>✏️ Edit Output Filename:</b>\nPlease send the new output filename (e.g., <code>my_merged_video.mkv</code>)\n⏱️ <i>Timeout: 30s</i>"
+        try:
+            prompt_msg = await client.send_message(chat_id=user_id, text=prompt_str)
+        except Exception as e:
+            LOGGER.warning(f"Failed to send output filename prompt to user {user_id}: {e}")
+            prompt_msg = None
+
+        if prompt_msg and hasattr(prompt_msg, "chat"):
+            from asyncio import get_running_loop
+            loop = get_running_loop()
+            event_done = loop.create_future()
+            user_input = []
+
+            async def name_filter(_, __, event):
+                u = event.from_user or event.sender_chat
+                return bool(u and u.id == user_id and event.chat.id == prompt_msg.chat.id and event.text)
+
+            async def name_handler(_, msg):
+                user_input.append(msg.text.strip())
+                await delete_message(msg)
+                if not event_done.done():
+                    event_done.set_result(True)
+
+            from pyrogram.handlers import MessageHandler
+            from pyrogram.filters import create
+            from asyncio import wait_for
+            h = client.add_handler(MessageHandler(name_handler, filters=create(name_filter)), group=-1)
+            try:
+                await wait_for(event_done, timeout=30)
+                if user_input and user_input[0]:
+                    new_name = user_input[0]
+                    p_data["output_filename"] = new_name
+                    planner_tasks[key] = p_data
+                    planner_store[key] = p_data
+                    if "format_ui" in p_data and "msg" in p_data:
+                        msg_text, markup = p_data["format_ui"](p_data, is_dm=True)
+                        await edit_message(p_data["msg"], msg_text, markup)
+            except Exception:
+                pass
+            finally:
+                client.remove_handler(*h)
+                await delete_message(prompt_msg)
+
+    elif cmd == "save":
+        await query.answer("Saving order...")
+        p_data["saved"] = True
+        planner_tasks[key] = p_data
+        planner_store[key] = p_data
+        fut = p_data.get("future")
+        if fut and not fut.done():
+            fut.set_result(True)
+        if "on_save_cb" in p_data and callable(p_data["on_save_cb"]):
+            try:
+                await p_data["on_save_cb"](p_data)
+            except Exception as e:
+                LOGGER.error(f"Error executing on_save_cb in plcb save: {e}")
+
+    elif cmd == "delete":
+        await query.answer("Session deleted")
+        planner_tasks.pop(key, None)
+        planner_store.pop(key, None)
+        fut = p_data.get("future")
+        if fut and not fut.done():
+            fut.set_result(False)
+        if "on_delete_cb" in p_data and callable(p_data["on_delete_cb"]):
+            try:
+                await p_data["on_delete_cb"](p_data)
+            except Exception as e:
+                LOGGER.error(f"Error executing on_delete_cb in plcb delete: {e}")
+
+
+@new_task
 async def start_merge_callback(client, query):
     data = query.data.split()
     mid = int(data[1])
     user_id = query.from_user.id
     key = f"{mid}_{user_id}"
     from bot import planner_tasks
-    p_data = planner_tasks.get(key)
+    from web.wserver import planner_store
+    p_data = planner_tasks.get(key) or planner_store.get(key)
+
+    if not p_data:
+        for k, v in list(planner_tasks.items()) + list(planner_store.items()):
+            if str(v.get("mid")) == str(mid) and str(v.get("user_id")) == str(user_id):
+                p_data = v
+                break
+
     if not p_data:
         return await query.answer("Planner session expired or not found!", show_alert=True)
     if not p_data.get("saved"):
-        return await query.answer("Please save the planner in Web App first!", show_alert=True)
+        return await query.answer("Please save the planner in Web App or Telegram first!", show_alert=True)
     await query.answer("Starting merge...")
     fut = p_data.get("future")
     if fut and not fut.done():

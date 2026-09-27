@@ -410,6 +410,9 @@ async def add_handlers():
         CallbackQueryHandler(ht_merge_callback, filters=regex("^htmerge"))
     )
     TgClient.bot.add_handler(
+        CallbackQueryHandler(planner_callback, filters=regex("^plcb"))
+    )
+    TgClient.bot.add_handler(
         CallbackQueryHandler(start_merge_callback, filters=regex("^startmerge"))
     )
     TgClient.bot.add_handler(

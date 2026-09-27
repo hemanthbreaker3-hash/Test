@@ -292,11 +292,21 @@ async def mini_planner(request: Request):
     return response
 
 
-@app.get("/api/planner/data")
-async def get_planner_data(mid: str, user_id: str):
+def _find_planner_data(mid: str, user_id: str):
     key = f"{mid}_{user_id}"
     from bot import planner_tasks
     data = planner_tasks.get(key) or planner_store.get(key)
+    if data:
+        return key, data
+    for k, v in list(planner_tasks.items()) + list(planner_store.items()):
+        if str(v.get("mid")) == str(mid) and str(v.get("user_id")) == str(user_id):
+            return k, v
+    return key, None
+
+
+@app.get("/api/planner/data")
+async def get_planner_data(mid: str, user_id: str):
+    _, data = _find_planner_data(mid, user_id)
     if not data:
         return JSONResponse({"error": "Planner session not found or expired"}, status_code=404)
     resp_data = {
@@ -319,12 +329,11 @@ async def save_planner_data(request: Request):
     files = body.get("files", [])
     output_filename = body.get("output_filename", "")
 
-    key = f"{mid}_{user_id}"
-    from bot import planner_tasks
-    data = planner_tasks.get(key) or planner_store.get(key)
+    key, data = _find_planner_data(mid, user_id)
     if not data:
-        return JSONResponse({"error": "Planner session not found"}, status_code=404)
+        return JSONResponse({"error": "Planner session not found or expired"}, status_code=404)
 
+    from bot import planner_tasks
     data["files"] = files
     data["output_filename"] = output_filename
     data["saved"] = True
@@ -350,10 +359,11 @@ async def delete_planner_data(request: Request):
     mid = body.get("mid")
     user_id = body.get("user_id")
 
-    key = f"{mid}_{user_id}"
+    key, data = _find_planner_data(mid, user_id)
     from bot import planner_tasks
     planner_store.pop(key, None)
-    data = planner_tasks.pop(key, None)
+    data_task = planner_tasks.pop(key, None)
+    data = data or data_task
 
     if data:
         fut = data.get("future")
