@@ -1970,28 +1970,18 @@ class TaskConfig:
                 res = await wait_for(fut, timeout=600)
                 if res and planner_info.get("saved"):
                     ordered_names = planner_info.get("files", [])
-                    reordered_v_files = []
-                    for fn in ordered_names:
-                        if fn in file_map:
-                            reordered_v_files.append(file_map[fn])
-                    for orig in v_files:
-                        if orig not in reordered_v_files:
-                            reordered_v_files.append(orig)
-                    v_files = reordered_v_files
+                    reordered_v_files = [file_map[fn] for fn in ordered_names if fn in file_map]
+                    if reordered_v_files:
+                        v_files = reordered_v_files
                     if p_out := planner_info.get("output_filename"):
                         out_filename = p_out
             except AsyncTimeoutError:
                 LOGGER.info(f"Merge Planner timed out after 10 min for {key}. Auto-saving default configuration.")
                 planner_info["saved"] = True
                 ordered_names = planner_info.get("files", file_names)
-                reordered_v_files = []
-                for fn in ordered_names:
-                    if fn in file_map:
-                        reordered_v_files.append(file_map[fn])
-                for orig in v_files:
-                    if orig not in reordered_v_files:
-                        reordered_v_files.append(orig)
-                v_files = reordered_v_files
+                reordered_v_files = [file_map[fn] for fn in ordered_names if fn in file_map]
+                if reordered_v_files:
+                    v_files = reordered_v_files
                 if p_out := planner_info.get("output_filename"):
                     out_filename = p_out
                 with suppress(Exception):
