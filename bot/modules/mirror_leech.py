@@ -686,54 +686,110 @@ class Mirror(TaskListener):
             await add_aria2_download(self, path, headers, ratio, seed_time)
 
     async def _process_range_each_sequentially(self, range_links):
+        from bot import active_range_tasks
         total_items = len(range_links)
+        range_id = f"rl_{self.mid}"
+        range_info = {
+            "range_id": range_id,
+            "mid": self.mid,
+            "user_id": self.user_id,
+            "tag": self.tag,
+            "total_links": total_items,
+            "current_idx": 1,
+            "current_sub_task": None,
+            "is_cancelled": False,
+            "links": range_links,
+        }
+        active_range_tasks[range_id] = range_info
         LOGGER.info(f"Processing range link in 'each' mode: {total_items} items continuously.")
 
-        for idx, item_url in enumerate(range_links, start=1):
-            if self.is_cancelled:
-                LOGGER.info("Sequential range link processing cancelled by user.")
-                break
+        try:
+            for idx, item_url in enumerate(range_links, start=1):
+                if range_info.get("is_cancelled") or self.is_cancelled:
+                    LOGGER.info("Sequential range link processing cancelled by user.")
+                    break
 
-            try:
-                sub_msg, sub_session = await get_tg_link_message(item_url, range_mode="normal")
-                tg_message = sub_msg[0] if isinstance(sub_msg, list) and sub_msg else sub_msg
+                range_info["current_idx"] = idx
 
-                if not tg_message:
+                try:
+                    sub_msg, sub_session = await get_tg_link_message(item_url, range_mode="normal")
+                    tg_message = sub_msg[0] if isinstance(sub_msg, list) and sub_msg else sub_msg
+
+                    if not tg_message:
+                        continue
+
+                    sub_task = Mirror(
+                        client=self.client,
+                        message=self.message,
+                        is_qbit=self.is_qbit,
+                        is_leech=self.is_leech,
+                        is_jd=self.is_jd,
+                        is_nzb=self.is_nzb,
+                        is_seedr=self.is_seedr,
+                        is_uphoster=self.is_uphoster,
+                        options=self.options,
+                    )
+                    sub_task.link = item_url
+                    sub_task.as_doc = self.as_doc
+                    sub_task.as_med = self.as_med
+                    sub_task.compress = self.compress
+                    sub_task.extract = self.extract
+                    sub_task.name = self.name
+                    sub_task.folder_name = self.folder_name
+                    sub_task.manual_merge = self.manual_merge
+                    sub_task.auto_merge = self.auto_merge
+                    sub_task.merge_custom_name = getattr(self, "merge_custom_name", "")
+                    sub_task.merge_mode = getattr(self, "merge_mode", "normal")
+                    sub_task.up_dest = self.up_dest
+                    sub_task.dump_dest = self.dump_dest
+                    sub_task.category = self.category
+                    sub_task.rc_flags = self.rc_flags
+                    sub_task.thumb = self.thumb
+                    sub_task.split_size = self.split_size
+                    sub_task.sample_video = self.sample_video
+                    sub_task.screen_shots = self.screen_shots
+                    sub_task.convert_audio = self.convert_audio
+                    sub_task.convert_video = self.convert_video
+                    sub_task.name_swap = self.name_swap
+                    sub_task.hybrid_leech = self.hybrid_leech
+                    sub_task.thumbnail_layout = self.thumbnail_layout
+                    sub_task.ffmpeg_cmds = self.ffmpeg_cmds
+                    sub_task.ht_flag = self.ht_flag
+                    sub_task.manual_rm_stream = getattr(self, "manual_rm_stream", False)
+                    sub_task.manual_reorder = getattr(self, "manual_reorder", False)
+                    sub_task.reorder_aud = getattr(self, "reorder_aud", [])
+                    sub_task.reorder_sub = getattr(self, "reorder_sub", [])
+                    sub_task.aud_select = getattr(self, "aud_select", None)
+                    sub_task.sub_select = getattr(self, "sub_select", None)
+                    sub_task.aud_order = getattr(self, "aud_order", None)
+                    sub_task.sub_order = getattr(self, "sub_order", None)
+                    sub_task.manual_trim = getattr(self, "manual_trim", False)
+                    sub_task.trim_range = getattr(self, "trim_range", "")
+                    sub_task.manual_extract = getattr(self, "manual_extract", False)
+                    sub_task.extract_types = getattr(self, "extract_types", [])
+                    sub_task.metadata_dict = getattr(self, "metadata_dict", {}).copy()
+                    sub_task.audio_metadata_dict = getattr(self, "audio_metadata_dict", {}).copy()
+                    sub_task.video_metadata_dict = getattr(self, "video_metadata_dict", {}).copy()
+                    sub_task.subtitle_metadata_dict = getattr(self, "subtitle_metadata_dict", {}).copy()
+
+                    range_info["current_sub_task"] = sub_task
+                    sub_task.done_event = bot_loop.create_future()
+                    try:
+                        await sub_task._run_single_range_item(tg_message, item_url, sub_session)
+                        from asyncio import wait_for
+                        await wait_for(sub_task.done_event, timeout=7200)
+                    except Exception as te:
+                        LOGGER.warning(f"Range task timeout or error for {item_url}: {te}")
+                    finally:
+                        if hasattr(sub_task, "done_event") and not sub_task.done_event.done():
+                            sub_task.done_event.set_result(False)
+                except Exception as e:
+                    LOGGER.error(f"Error processing range item {idx}/{total_items} ({item_url}): {e}")
                     continue
 
-                sub_task = Mirror(
-                    client=self.client,
-                    message=self.message,
-                    is_qbit=self.is_qbit,
-                    is_leech=self.is_leech,
-                    is_jd=self.is_jd,
-                    is_nzb=self.is_nzb,
-                    is_seedr=self.is_seedr,
-                    is_uphoster=self.is_uphoster,
-                    options=self.options,
-                )
-                sub_task.link = item_url
-                sub_task.auto_merge = self.auto_merge
-                sub_task.manual_merge = self.manual_merge
-                sub_task.merge_mode = getattr(self, "merge_mode", "normal")
-                sub_task.compress = self.compress
-                sub_task.extract = self.extract
-                sub_task.thumb = self.thumb
-                sub_task.up_dest = self.up_dest
-                sub_task.dump_dest = self.dump_dest
-
-                sub_task.done_event = bot_loop.create_future()
-                await sub_task._run_single_range_item(tg_message, item_url, sub_session)
-                try:
-                    from asyncio import wait_for
-                    await wait_for(sub_task.done_event, timeout=7200)
-                except Exception as te:
-                    LOGGER.warning(f"Range task timeout or error for {item_url}: {te}")
-            except Exception as e:
-                LOGGER.error(f"Error processing range item {idx}/{total_items} ({item_url}): {e}")
-                continue
-
-            await sleep(1)
+                await sleep(1)
+        finally:
+            active_range_tasks.pop(range_id, None)
 
     async def _run_single_range_item(self, reply_to, item_url, session):
         path = f"{DOWNLOAD_DIR}{self.mid}{self.folder_name}"

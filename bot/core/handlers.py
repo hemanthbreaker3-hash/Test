@@ -101,6 +101,16 @@ async def add_handlers():
     )
     TgClient.bot.add_handler(
         MessageHandler(
+            cancel_range_link,
+            filters=command(BotCommands.CancelRangeLinkCommand, case_sensitive=True)
+            & CustomFilters.authorized,
+        )
+    )
+    TgClient.bot.add_handler(
+        CallbackQueryHandler(cancel_range_link_cb, filters=regex("^cancelrl"))
+    )
+    TgClient.bot.add_handler(
+        MessageHandler(
             cancel_all_buttons,
             filters=command(BotCommands.CancelAllCommand, case_sensitive=True)
             & CustomFilters.authorized,

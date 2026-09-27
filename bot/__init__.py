@@ -94,6 +94,7 @@ queued_up = {}
 status_dict = {}
 task_dict = {}
 planner_tasks = {}
+active_range_tasks = {}
 rss_dict = {}
 shortener_dict = {}
 categories_dict = {}
