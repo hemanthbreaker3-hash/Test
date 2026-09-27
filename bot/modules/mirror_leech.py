@@ -906,7 +906,11 @@ async def ht_merge_callback(client, query):
 @new_task
 async def planner_callback(client, query):
     data = query.data.split()
-    cmd = data[1]
+    cmd = data[1] if len(data) > 1 else ""
+
+    if cmd == "dummy":
+        return await query.answer()
+
     user_id = query.from_user.id
     from bot import planner_tasks
     from web.wserver import planner_store
@@ -917,7 +921,7 @@ async def planner_callback(client, query):
 
     if not p_data:
         for k, v in list(planner_tasks.items()) + list(planner_store.items()):
-            if str(v.get("mid")) == str(mid) and str(v.get("user_id")) == str(user_id):
+            if str(v.get("mid")) == str(mid) or str(v.get("user_id")) == str(user_id):
                 p_data = v
                 key = k
                 break
@@ -927,9 +931,6 @@ async def planner_callback(client, query):
 
     if query.from_user.id != p_data.get("user_id"):
         return await query.answer("This planner session belongs to another user!", show_alert=True)
-
-    if cmd == "dummy":
-        return await query.answer()
 
     elif cmd == "move":
         idx = int(data[3])

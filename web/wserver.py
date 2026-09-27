@@ -298,9 +298,27 @@ def _find_planner_data(mid: str, user_id: str):
     data = planner_tasks.get(key) or planner_store.get(key)
     if data:
         return key, data
-    for k, v in list(planner_tasks.items()) + list(planner_store.items()):
-        if str(v.get("mid")) == str(mid) and str(v.get("user_id")) == str(user_id):
-            return k, v
+
+    all_sessions = list(planner_tasks.items()) + list(planner_store.items())
+
+    if mid and user_id:
+        for k, v in all_sessions:
+            if str(v.get("mid")) == str(mid) and str(v.get("user_id")) == str(user_id):
+                return k, v
+
+    if mid:
+        for k, v in all_sessions:
+            if str(v.get("mid")) == str(mid):
+                return k, v
+
+    if user_id:
+        for k, v in all_sessions:
+            if str(v.get("user_id")) == str(user_id):
+                return k, v
+
+    if len(all_sessions) == 1:
+        return all_sessions[0][0], all_sessions[0][1]
+
     return key, None
 
 

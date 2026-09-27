@@ -372,8 +372,8 @@
     }
 
     const urlParams = new URLSearchParams(window.location.search);
-    const mid = urlParams.get('mid');
-    const user_id = urlParams.get('user_id');
+    let mid = urlParams.get('mid') || '';
+    let user_id = urlParams.get('user_id') || (tg?.initDataUnsafe?.user?.id ? String(tg.initDataUnsafe.user.id) : '');
 
     let originalFiles = [];
     let fileItems = [];
