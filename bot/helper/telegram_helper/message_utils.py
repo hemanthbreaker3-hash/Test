@@ -123,6 +123,30 @@ async def send_message(message, text, buttons=None, block=True, photo=None, **kw
         return await send_message(message, text, buttons)
     except ReplyMarkupInvalid as rmi:
         LOGGER.warning(str(rmi))
+        if buttons and hasattr(buttons, "inline_keyboard"):
+            for row in buttons.inline_keyboard:
+                for btn in row:
+                    if hasattr(btn, "style"):
+                        btn.style = None
+            try:
+                if isinstance(message, Message):
+                    return await message.reply(
+                        text=text,
+                        reply_parameters=ReplyParameters(message_id=message.id),
+                        disable_web_page_preview=True,
+                        disable_notification=True,
+                        reply_markup=buttons,
+                        **kwargs,
+                    )
+                return await TgClient.bot.send_message(
+                    chat_id=int(message),
+                    text=text,
+                    disable_web_page_preview=True,
+                    disable_notification=True,
+                    reply_markup=buttons,
+                )
+            except Exception:
+                pass
         return await send_message(message, text, None)
     except MessageTooLong:
         return await send_message(message, text[:4096], buttons, block, photo)
@@ -187,6 +211,20 @@ async def edit_message(message, text, buttons=None, block=True, photo=None):
         pass
     except ReplyMarkupInvalid as rmi:
         LOGGER.warning(str(rmi))
+        if buttons and hasattr(buttons, "inline_keyboard"):
+            for row in buttons.inline_keyboard:
+                for btn in row:
+                    if hasattr(btn, "style"):
+                        btn.style = None
+            try:
+                msg_text = text[:4090] + "..." if len(text) > 4096 else text
+                return await message.edit(
+                    text=msg_text,
+                    disable_web_page_preview=True,
+                    reply_markup=buttons,
+                )
+            except Exception:
+                pass
         return await edit_message(message, text, None, block, photo)
     except FloodWait as f:
         LOGGER.warning(str(f))

@@ -7,7 +7,7 @@ URL_SCHEMES = ("http://", "https://", "tg://")
 def _btn_style(style=None):
     if style in (ButtonStyle.DANGER, ButtonStyle.SUCCESS, ButtonStyle.PRIMARY):
         return style
-    return ButtonStyle.PRIMARY
+    return None
 
 
 def valid_url(link):
@@ -39,15 +39,19 @@ class ButtonMaker:
 
             LOGGER.warning(f"dropping button {key!r} with unusable url {link!r}")
             return
+        btn_kwargs = {"text": key, "url": safe}
+        if st := _btn_style(style):
+            btn_kwargs["style"] = st
         self.buttons[position if position in self.buttons else "default"].append(
-            InlineKeyboardButton(text=key, url=safe, style=_btn_style(style))
+            InlineKeyboardButton(**btn_kwargs)
         )
 
     def web_app_button(self, key, link, position=None, style=None):
+        btn_kwargs = {"text": key, "web_app": WebAppInfo(url=link)}
+        if st := _btn_style(style):
+            btn_kwargs["style"] = st
         self.buttons[position if position in self.buttons else "default"].append(
-            InlineKeyboardButton(
-                text=key, web_app=WebAppInfo(url=link), style=_btn_style(style)
-            )
+            InlineKeyboardButton(**btn_kwargs)
         )
 
     def data_button(self, key, data, position=None, style=None):
@@ -61,8 +65,11 @@ class ButtonMaker:
                     f"Callback data exceeds 64 bytes limit ({len(encoded)}): {btn_data}"
                 )
                 btn_data = encoded[:64].decode("utf-8", errors="ignore")
+        btn_kwargs = {"text": str(key), "callback_data": btn_data}
+        if st := _btn_style(style):
+            btn_kwargs["style"] = st
         self.buttons[position if position in self.buttons else "default"].append(
-            InlineKeyboardButton(text=str(key), callback_data=btn_data, style=_btn_style(style) if style else None)
+            InlineKeyboardButton(**btn_kwargs)
         )
 
     def build_menu(self, b_cols=1, h_cols=8, fb_cols=2, lb_cols=2, f_cols=8):
