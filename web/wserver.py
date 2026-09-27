@@ -306,14 +306,14 @@ def _find_planner_data(mid: str, user_id: str):
             if str(v.get("mid")) == str(mid) and str(v.get("user_id")) == str(user_id):
                 return k, v
 
-    if mid:
-        for k, v in all_sessions:
-            if str(v.get("mid")) == str(mid):
-                return k, v
-
     if user_id:
         for k, v in all_sessions:
             if str(v.get("user_id")) == str(user_id):
+                return k, v
+
+    if mid:
+        for k, v in all_sessions:
+            if str(v.get("mid")) == str(mid):
                 return k, v
 
     if len(all_sessions) == 1:

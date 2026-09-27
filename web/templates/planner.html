@@ -7,17 +7,19 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     :root {
-      --bg-color: #0f172a;
-      --card-bg: rgba(30, 41, 59, 0.85);
-      --border-color: rgba(255, 255, 255, 0.1);
+      --bg-gradient: radial-gradient(circle at 50% -20%, #1e1b4b 0%, #0f172a 60%, #020617 100%);
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --border-color: rgba(255, 255, 255, 0.12);
+      --border-glow: rgba(56, 189, 248, 0.25);
       --accent: #38bdf8;
+      --accent-gradient: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
       --accent-hover: #0284c7;
       --text: #f8fafc;
       --text-muted: #94a3b8;
-      --btn-bg: #2563eb;
-      --btn-hover: #1d4ed8;
-      --danger: #ef4444;
-      --danger-hover: #dc2626;
+      --btn-bg: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+      --btn-hover: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+      --danger: linear-gradient(135deg, #ef4444 0%, #f43f5e 100%);
+      --danger-hover: linear-gradient(135deg, #dc2626 0%, #e11d48 100%);
       --success: #22c55e;
       --warning: #f59e0b;
     }
@@ -28,8 +30,8 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: var(--bg-color);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg-gradient);
       color: var(--text);
       margin: 0;
       padding: 16px;
@@ -37,6 +39,7 @@
       display: flex;
       flex-direction: column;
       align-items: center;
+      background-attachment: fixed;
     }
 
     .container {
@@ -46,14 +49,14 @@
 
     .header-card {
       background: var(--card-bg);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       border: 1px solid var(--border-color);
-      border-radius: 16px;
-      padding: 18px 20px;
-      margin-bottom: 16px;
+      border-radius: 20px;
+      padding: 22px 24px;
+      margin-bottom: 18px;
       text-align: center;
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36);
+      box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45), inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
     }
 
     .header-card h2 {
@@ -211,6 +214,47 @@
       flex-shrink: 0;
     }
 
+    .pagination-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .page-info {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .page-btns {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-page {
+      background: rgba(51, 65, 85, 0.8);
+      color: #fff;
+      border: 1px solid var(--border-color);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease, opacity 0.15s ease;
+    }
+
+    .btn-page:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    .btn-page:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
     .btn-ctrl {
       background: rgba(51, 65, 85, 0.8);
       color: #fff;
@@ -353,6 +397,13 @@
         <ul id="file-list" class="file-list">
           <!-- Dynamic list -->
         </ul>
+        <div class="pagination-bar" id="pagination-bar" style="display: none;">
+          <span class="page-info" id="page-info">Page 1 of 1</span>
+          <div class="page-btns">
+            <button class="btn-page" id="btn-prev-page" onclick="prevPage()">◀️ Prev</button>
+            <button class="btn-page" id="btn-next-page" onclick="nextPage()">Next ▶️</button>
+          </div>
+        </div>
       </div>
 
       <div class="actions">
@@ -380,6 +431,8 @@
     let timerInterval = null;
     let createdAt = 0;
     let timeoutSeconds = 600;
+    let currentPage = 1;
+    const pageSize = 10;
 
     function showStatus(msg, type = 'info') {
       const statusEl = document.getElementById('status-msg');
@@ -388,14 +441,14 @@
     }
 
     async function loadPlanner() {
-      if (!mid || !user_id) {
+      if (!mid && !user_id) {
         document.getElementById('loading').style.display = 'none';
         showStatus('Missing session parameters (mid/user_id).', 'error');
         return;
       }
 
       try {
-        const resp = await fetch(`/api/planner/data?mid=${mid}&user_id=${user_id}`);
+        const resp = await fetch(`/api/planner/data?mid=${encodeURIComponent(mid)}&user_id=${encodeURIComponent(user_id)}`);
         if (!resp.ok) {
           const errData = await resp.json().catch(() => ({}));
           document.getElementById('loading').style.display = 'none';
@@ -457,37 +510,90 @@
     function renderList() {
       const listEl = document.getElementById('file-list');
       listEl.innerHTML = '';
-      document.getElementById('file-count').innerText = fileItems.length;
+      const totalFiles = fileItems.length;
+      document.getElementById('file-count').innerText = totalFiles;
 
-      fileItems.forEach((file, idx) => {
+      const totalPages = Math.max(1, Math.ceil(totalFiles / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+
+      const paginationBar = document.getElementById('pagination-bar');
+      if (totalPages > 1) {
+        paginationBar.style.display = 'flex';
+        document.getElementById('page-info').innerText = `Page ${currentPage} of ${totalPages}`;
+        document.getElementById('btn-prev-page').disabled = (currentPage <= 1);
+        document.getElementById('btn-next-page').disabled = (currentPage >= totalPages);
+      } else {
+        paginationBar.style.display = 'none';
+      }
+
+      const startIdx = (currentPage - 1) * pageSize;
+      const endIdx = Math.min(startIdx + pageSize, totalFiles);
+      const pageItems = fileItems.slice(startIdx, endIdx);
+
+      pageItems.forEach((file, idx) => {
+        const globalIdx = startIdx + idx;
         const li = document.createElement('li');
         li.className = 'file-item';
 
         li.innerHTML = `
           <div class="file-info">
-            <div class="serial">${idx + 1}</div>
+            <div class="serial">${globalIdx + 1}</div>
             <div class="filename" title="${file}">${file}</div>
           </div>
           <div class="controls">
-            <button class="btn-ctrl" ${idx === 0 ? 'disabled' : ''} onclick="moveItem(${idx}, -1)" title="Move Up">▲</button>
-            <button class="btn-ctrl" ${idx === fileItems.length - 1 ? 'disabled' : ''} onclick="moveItem(${idx}, 1)" title="Move Down">▼</button>
+            <button class="btn-ctrl" ${globalIdx === 0 ? 'disabled' : ''} onclick="moveItem(${globalIdx}, -1)" title="Move Up">▲</button>
+            <button class="btn-ctrl" ${globalIdx === totalFiles - 1 ? 'disabled' : ''} onclick="moveItem(${globalIdx}, 1)" title="Move Down">▼</button>
+            <button class="btn-ctrl" style="background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-color: rgba(239, 68, 68, 0.3);" onclick="removeSingleFile(${globalIdx})" title="Remove File">❌</button>
           </div>
         `;
         listEl.appendChild(li);
       });
     }
 
-    function moveItem(idx, dir) {
-      const targetIdx = idx + dir;
+    function prevPage() {
+      if (currentPage > 1) {
+        currentPage--;
+        renderList();
+      }
+    }
+
+    function nextPage() {
+      const totalPages = Math.ceil(fileItems.length / pageSize);
+      if (currentPage < totalPages) {
+        currentPage++;
+        renderList();
+      }
+    }
+
+    function removeSingleFile(globalIdx) {
+      if (globalIdx < 0 || globalIdx >= fileItems.length) return;
+      const removed = fileItems.splice(globalIdx, 1);
+      if (fileItems.length < 2) {
+        showStatus('Warning: Need at least 2 files to perform video merge.', 'info');
+      }
+      renderList();
+    }
+
+    function moveItem(globalIdx, dir) {
+      const targetIdx = globalIdx + dir;
       if (targetIdx < 0 || targetIdx >= fileItems.length) return;
-      const temp = fileItems[idx];
-      fileItems[idx] = fileItems[targetIdx];
+      const temp = fileItems[globalIdx];
+      fileItems[globalIdx] = fileItems[targetIdx];
       fileItems[targetIdx] = temp;
+
+      if (targetIdx < (currentPage - 1) * pageSize) {
+        currentPage--;
+      } else if (targetIdx >= currentPage * pageSize) {
+        currentPage++;
+      }
+
       renderList();
     }
 
     function resetOrder() {
       fileItems = [...originalFiles];
+      currentPage = 1;
       renderList();
     }
 

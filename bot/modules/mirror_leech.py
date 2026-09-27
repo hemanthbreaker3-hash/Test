@@ -925,28 +925,59 @@ async def planner_callback(client, query):
     if query.from_user.id != p_data.get("user_id"):
         return await query.answer("This planner session belongs to another user!", show_alert=True)
 
+    elif cmd == "page":
+        target_page = int(data[3])
+        p_data["page"] = target_page
+        planner_tasks[key] = p_data
+        planner_store[key] = p_data
+        await query.answer(f"Page {target_page}")
+        if "format_ui" in p_data and "msg" in p_data:
+            msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=target_page)
+            await edit_message(p_data["msg"], msg_text, markup)
+
+    elif cmd == "rmfile":
+        idx = int(data[3])
+        curr_page = int(data[4]) if len(data) > 4 else p_data.get("page", 1)
+        files = p_data.get("files", [])
+        if 0 <= idx < len(files):
+            removed_file = files.pop(idx)
+            if len(files) < 2:
+                p_data["files"] = files
+                await query.answer(f"Removed '{removed_file[:20]}'. Need at least 2 files to merge!", show_alert=True)
+            else:
+                p_data["files"] = files
+                await query.answer(f"Removed '{removed_file[:20]}'")
+            planner_tasks[key] = p_data
+            planner_store[key] = p_data
+            if "format_ui" in p_data and "msg" in p_data:
+                msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=curr_page)
+                await edit_message(p_data["msg"], msg_text, markup)
+
     elif cmd == "move":
         idx = int(data[3])
         direction = int(data[4])
+        curr_page = int(data[5]) if len(data) > 5 else p_data.get("page", 1)
         target_idx = idx + direction
         files = p_data.get("files", [])
         if 0 <= idx < len(files) and 0 <= target_idx < len(files):
             files[idx], files[target_idx] = files[target_idx], files[idx]
             p_data["files"] = files
+            p_data["page"] = curr_page
             planner_tasks[key] = p_data
             planner_store[key] = p_data
             await query.answer("File reordered")
             if "format_ui" in p_data and "msg" in p_data:
-                msg_text, markup = p_data["format_ui"](p_data, is_dm=True)
+                msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=curr_page)
                 await edit_message(p_data["msg"], msg_text, markup)
 
     elif cmd == "reset":
         p_data["files"] = list(p_data.get("orig_files", []))
+        curr_page = p_data.get("page", 1)
         planner_tasks[key] = p_data
         planner_store[key] = p_data
         await query.answer("Order reset to default")
         if "format_ui" in p_data and "msg" in p_data:
-            msg_text, markup = p_data["format_ui"](p_data, is_dm=True)
+            msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=curr_page)
             await edit_message(p_data["msg"], msg_text, markup)
 
     elif cmd == "name":
@@ -985,8 +1016,9 @@ async def planner_callback(client, query):
                     p_data["output_filename"] = new_name
                     planner_tasks[key] = p_data
                     planner_store[key] = p_data
+                    curr_page = p_data.get("page", 1)
                     if "format_ui" in p_data and "msg" in p_data:
-                        msg_text, markup = p_data["format_ui"](p_data, is_dm=True)
+                        msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=curr_page)
                         await edit_message(p_data["msg"], msg_text, markup)
             except Exception:
                 pass
@@ -1025,7 +1057,7 @@ async def planner_callback(client, query):
 @new_task
 async def start_merge_callback(client, query):
     data = query.data.split()
-    mid = int(data[1])
+    mid = data[1] if len(data) > 1 else ""
     user_id = query.from_user.id
     key = f"{mid}_{user_id}"
     from bot import planner_tasks
@@ -1033,15 +1065,19 @@ async def start_merge_callback(client, query):
     p_data = planner_tasks.get(key) or planner_store.get(key)
 
     if not p_data:
-        for k, v in list(planner_tasks.items()) + list(planner_store.items()):
-            if str(v.get("mid")) == str(mid) and str(v.get("user_id")) == str(user_id):
+        all_sessions = list(planner_tasks.items()) + list(planner_store.items())
+        for k, v in all_sessions:
+            if str(v.get("mid")) == str(mid) or str(v.get("user_id")) == str(user_id):
                 p_data = v
+                key = k
                 break
 
     if not p_data:
         return await query.answer("Planner session expired or not found!", show_alert=True)
+
     if not p_data.get("saved"):
-        return await query.answer("Please save the planner in Web App or Telegram first!", show_alert=True)
+        p_data["saved"] = True
+
     await query.answer("Starting merge...")
     fut = p_data.get("future")
     if fut and not fut.done():
