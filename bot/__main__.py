@@ -174,7 +174,6 @@ memory_monitor.start()
 from pyrogram.filters import regex
 from pyrogram.handlers import CallbackQueryHandler
 
-from .core.handlers import add_handlers
 from .helper.ext_utils.bot_utils import new_task
 from .helper.telegram_helper.filters import CustomFilters
 from .helper.telegram_helper.message_utils import (
@@ -189,6 +188,7 @@ async def restart_sessions_confirm(_, query):
     data = query.data.split()
     message = query.message
     if data[1] == "confirm":
+        from .core.handlers import add_handlers
         reply_to = message.reply_to_message
         restart_message = await send_message(reply_to, "Restarting Session(s)...")
         await delete_message(message)
