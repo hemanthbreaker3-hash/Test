@@ -254,14 +254,7 @@ class Mirror(TaskListener):
             self.merge_mode = self.user_dict.get("AUTO_MERGE_MODE", "normal")
 
 
-        has_b_or_m = bool(
-            args.get("-b")
-            or args.get("-m")
-            or "-b" in self.options
-            or "-m" in self.options
-            or self.manual_merge
-        )
-        self.ht_flag = (args["-ht"] or "-ht" in self.options) and has_b_or_m
+        self.ht_flag = bool(args["-ht"] or "-ht" in self.options)
 
         from ..helper.ext_utils.task_manager import get_task_key
         task_source = self.link or (self.message.reply_to_message.text if self.message.reply_to_message and self.message.reply_to_message.text else "") or self.name
