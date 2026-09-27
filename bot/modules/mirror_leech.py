@@ -925,28 +925,41 @@ async def planner_callback(client, query):
     if query.from_user.id != p_data.get("user_id"):
         return await query.answer("This planner session belongs to another user!", show_alert=True)
 
+    elif cmd == "page":
+        target_page = int(data[3])
+        p_data["page"] = target_page
+        planner_tasks[key] = p_data
+        planner_store[key] = p_data
+        await query.answer(f"Page {target_page}")
+        if "format_ui" in p_data and "msg" in p_data:
+            msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=target_page)
+            await edit_message(p_data["msg"], msg_text, markup)
+
     elif cmd == "move":
         idx = int(data[3])
         direction = int(data[4])
+        curr_page = int(data[5]) if len(data) > 5 else p_data.get("page", 1)
         target_idx = idx + direction
         files = p_data.get("files", [])
         if 0 <= idx < len(files) and 0 <= target_idx < len(files):
             files[idx], files[target_idx] = files[target_idx], files[idx]
             p_data["files"] = files
+            p_data["page"] = curr_page
             planner_tasks[key] = p_data
             planner_store[key] = p_data
             await query.answer("File reordered")
             if "format_ui" in p_data and "msg" in p_data:
-                msg_text, markup = p_data["format_ui"](p_data, is_dm=True)
+                msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=curr_page)
                 await edit_message(p_data["msg"], msg_text, markup)
 
     elif cmd == "reset":
         p_data["files"] = list(p_data.get("orig_files", []))
+        curr_page = p_data.get("page", 1)
         planner_tasks[key] = p_data
         planner_store[key] = p_data
         await query.answer("Order reset to default")
         if "format_ui" in p_data and "msg" in p_data:
-            msg_text, markup = p_data["format_ui"](p_data, is_dm=True)
+            msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=curr_page)
             await edit_message(p_data["msg"], msg_text, markup)
 
     elif cmd == "name":
@@ -985,8 +998,9 @@ async def planner_callback(client, query):
                     p_data["output_filename"] = new_name
                     planner_tasks[key] = p_data
                     planner_store[key] = p_data
+                    curr_page = p_data.get("page", 1)
                     if "format_ui" in p_data and "msg" in p_data:
-                        msg_text, markup = p_data["format_ui"](p_data, is_dm=True)
+                        msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=curr_page)
                         await edit_message(p_data["msg"], msg_text, markup)
             except Exception:
                 pass

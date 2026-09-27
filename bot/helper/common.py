@@ -1876,29 +1876,49 @@ class TaskConfig:
             planner_tasks[key] = planner_info
             planner_store[key] = planner_info
 
-            def format_planner_ui(p_info, is_dm=True):
+            def format_planner_ui(p_info, is_dm=True, page=1):
                 cur_files = p_info.get("files", [])
                 cur_out = p_info.get("output_filename", out_filename)
+                page_size = 10
+                total_files = len(cur_files)
+                total_pages = max(1, (total_files + page_size - 1) // page_size)
+                page = max(1, min(page, total_pages))
+                p_info["page"] = page
+
+                start_idx = (page - 1) * page_size
+                end_idx = min(start_idx + page_size, total_files)
+                page_files = cur_files[start_idx:end_idx]
+
                 msg_text = (
                     f"<b>🧩 Merge Planner</b>\n\n"
                     f"• <b>Output Filename:</b> <code>{escape(cur_out)}</code>\n"
-                    f"• <b>Files to Merge ({len(cur_files)}):</b>\n"
-                    + "\n".join([f"{idx + 1}. {escape(fn)}" for idx, fn in enumerate(cur_files)])
+                    f"• <b>Files to Merge ({total_files}):</b> [Page {page}/{total_pages}]\n"
+                    + "\n".join([f"{start_idx + idx + 1}. {escape(fn)}" for idx, fn in enumerate(page_files)])
                     + "\n\n<i>Reorder files below, edit output filename, or open Mini App.</i>"
                 )
                 buttons = ButtonMaker()
                 if Config.BASE_URL:
-                    planner_url = f"{Config.BASE_URL.rstrip('/')}/app/planner?mid={p_info['mid']}&user_id={p_info['user_id']}"
-                    if str(Config.BASE_URL).startswith("https://") and is_dm:
-                        buttons.web_app_button("📱 Open Mini App", planner_url)
-                    else:
-                        buttons.url_button("📱 Open Mini App", planner_url)
+                    raw_url = str(Config.BASE_URL).rstrip('/')
+                    if raw_url.startswith("http://"):
+                        raw_url = f"https://{raw_url[7:]}"
+                    elif not raw_url.startswith("https://"):
+                        raw_url = f"https://{raw_url}"
+                    planner_url = f"{raw_url}/app/planner?mid={p_info['mid']}&user_id={p_info['user_id']}"
+                    buttons.url_button("📱 Open Mini App", planner_url)
 
-                for idx in range(len(cur_files)):
-                    up_cb = f"plcb move {p_info['mid']} {idx} -1" if idx > 0 else "plcb dummy"
-                    dn_cb = f"plcb move {p_info['mid']} {idx} 1" if idx < len(cur_files) - 1 else "plcb dummy"
-                    buttons.data_button(f"#{idx + 1} ⬆️", up_cb)
-                    buttons.data_button(f"#{idx + 1} ⬇️", dn_cb)
+                for idx, fn in enumerate(page_files):
+                    global_idx = start_idx + idx
+                    up_cb = f"plcb move {p_info['mid']} {global_idx} -1 {page}" if global_idx > 0 else "plcb dummy"
+                    dn_cb = f"plcb move {p_info['mid']} {global_idx} 1 {page}" if global_idx < total_files - 1 else "plcb dummy"
+                    buttons.data_button(f"#{global_idx + 1} ⬆️", up_cb)
+                    buttons.data_button(f"#{global_idx + 1} ⬇️", dn_cb)
+
+                if total_pages > 1:
+                    prev_page = page - 1 if page > 1 else total_pages
+                    next_page = page + 1 if page < total_pages else 1
+                    buttons.data_button("◀️ Prev", f"plcb page {p_info['mid']} {prev_page}")
+                    buttons.data_button(f"Page {page}/{total_pages}", "plcb dummy")
+                    buttons.data_button("Next ▶️", f"plcb page {p_info['mid']} {next_page}")
 
                 buttons.data_button("🔄 Reset Order", f"plcb reset {p_info['mid']}")
                 buttons.data_button("✏️ Rename Output", f"plcb name {p_info['mid']}")
