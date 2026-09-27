@@ -1894,17 +1894,9 @@ class TaskConfig:
                     f"• <b>Output Filename:</b> <code>{escape(cur_out)}</code>\n"
                     f"• <b>Files to Merge ({total_files}):</b> [Page {page}/{total_pages}]\n"
                     + "\n".join([f"{start_idx + idx + 1}. {escape(fn)}" for idx, fn in enumerate(page_files)])
-                    + "\n\n<i>Reorder files below, edit output filename, or open Mini App.</i>"
+                    + "\n\n<i>Reorder files below or edit output filename.</i>"
                 )
                 buttons = ButtonMaker()
-                if Config.BASE_URL:
-                    raw_url = str(Config.BASE_URL).rstrip('/')
-                    if raw_url.startswith("http://"):
-                        raw_url = f"https://{raw_url[7:]}"
-                    elif not raw_url.startswith("https://"):
-                        raw_url = f"https://{raw_url}"
-                    planner_url = f"{raw_url}/app/planner?mid={p_info['mid']}&user_id={p_info['user_id']}"
-                    buttons.url_button("📱 Open Mini App", planner_url)
 
                 for idx, fn in enumerate(page_files):
                     global_idx = start_idx + idx
