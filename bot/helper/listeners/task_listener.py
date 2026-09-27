@@ -284,6 +284,15 @@ class TaskListener(TaskConfig):
             self.size = await get_path_size(up_dir)
             self.clear()
 
+        if getattr(self, "manual_reorder", False) or getattr(self, "manual_rm_stream", False) or getattr(self, "reorder_aud", None) or getattr(self, "reorder_sub", None):
+            up_path = await self.proceed_reorder(up_path, gid)
+            if self.is_cancelled or not up_path:
+                return
+            self.is_file = await aiopath.isfile(up_path)
+            self.name = up_path.replace(f"{up_dir}/", "").split("/", 1)[0]
+            self.size = await get_path_size(up_dir)
+            self.clear()
+
         # Automatic Pipeline Order: Encode -> Compress -> Watermark -> Merge -> Track Manager
         from ..telegram_helper.filters import CustomFilters
         is_sudo_user = await CustomFilters.sudo("", self.message)
@@ -777,6 +786,9 @@ class TaskListener(TaskConfig):
             if self.mid in non_queued_up:
                 non_queued_up.remove(self.mid)
 
+        if hasattr(self, "done_event") and self.done_event and not self.done_event.done():
+            self.done_event.set_result(True)
+
         await start_from_queued()
 
     async def on_download_error(self, error, button=None, is_limit=False):
@@ -847,6 +859,9 @@ class TaskListener(TaskConfig):
                 non_queued_dl.remove(self.mid)
             if self.mid in non_queued_up:
                 non_queued_up.remove(self.mid)
+
+        if hasattr(self, "done_event") and self.done_event and not self.done_event.done():
+            self.done_event.set_result(False)
 
         await start_from_queued()
         await sleep(3)

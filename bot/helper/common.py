@@ -1851,13 +1851,15 @@ class TaskConfig:
         else:
             out_filename = out_base
 
-        if getattr(self, "merge_mode", "normal") == "advanced" and len(v_files) > 1:
+        merge_mode = getattr(self, "merge_mode", None) or self.user_dict.get("AUTO_MERGE_MODE") or getattr(Config, "AUTO_MERGE_MODE", "normal")
+        if merge_mode == "advanced" and (len(v_files) > 1 or total_inputs > 1):
             from bot import planner_tasks, bot_loop
             from web.wserver import planner_store
             key = f"{self.mid}_{self.user_id}"
             fut = bot_loop.create_future()
 
-            file_map = {ospath.basename(f): f for f in v_files}
+            files_to_plan = v_files if len(v_files) > 1 else (v_files + a_files + s_files)
+            file_map = {ospath.basename(f): f for f in files_to_plan}
             file_names = list(file_map.keys())
 
             from time import time

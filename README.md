@@ -1,11 +1,11 @@
 <p align="center">
-   <img src="docs/w-icon.svg" alt="WZML-X logo" width="160">
+   <img src="docs/w-icon.svg" alt="HTR-X logo" width="160">
 </p>
 
-<h1 align="center">WZML-X</h1>
+<h1 align="center">HTR-X</h1>
 
 <p align="center">
-   Telegram mirroring and leeching platform with a container-based runtime, a lightweight web UI, and a configurable transfer pipeline.
+   Telegram mirroring and leeching platform with a container-based runtime, a lightweight web UI, and a highly configurable transfer pipeline.
 </p>
 
 <p align="center">
@@ -57,13 +57,13 @@
 | Area | Details |
 |---|---|
 | Runtime | Python Telegram bot + web UI |
-| Deployment | Docker & Docker Compose (buildx) |
+| Deployment | Docker & Docker Compose or Systemd Service |
 | Required config | `BOT_TOKEN`, `TELEGRAM_API`, `TELEGRAM_HASH`, `OWNER_ID`, `DATABASE_URL` |
 | License | [LICENSE](LICENSE) |
 
 ## Why Use It
 
-WZML-X is built for users who want a single bot stack that can mirror, leech, manage files, and expose a simple web-based selection flow without stitching together multiple tools. The README focuses on what you need to deploy it quickly, understand the moving parts, and tune the behavior safely.
+HTR-X is built for users who want a single bot stack that can mirror, leech, manage files, and expose a simple web-based selection flow without stitching together multiple tools. The README focuses on what you need to deploy it quickly, understand the moving parts, and tune the behavior safely.
 
 ## What It Covers
 
@@ -71,6 +71,8 @@ WZML-X is built for users who want a single bot stack that can mirror, leech, ma
 |---|---|
 | Mirroring | Send files to Telegram with a controllable pipeline |
 | Leeching | Deliver files in the format you prefer, including document and media workflows |
+| Advanced Merge Planner | Interactively reorder files, edit output filenames, and configure merge parameters before uploading |
+| Pre-Upload Video Tools (`-ht`) | Trim media, extract video/audio/subtitles, swap tracks, and toggle merge mode on demand |
 | File selection UI | Review and select torrent / NZB / upload contents before finalizing |
 | Multi-source downloads | Use qBittorrent, Aria2, JDownloader, Mega, NZB, and yt-dlp integrations |
 | Storage and upload paths | Push content to Google Drive, Rclone, Mega, and other supported routes |
@@ -78,12 +80,12 @@ WZML-X is built for users who want a single bot stack that can mirror, leech, ma
 
 ## How It Runs
 
-Deploy with Docker and provide the required configuration values. The container takes care of the runtime path, so users only need to build or start the image and set their settings.
+Deploy with Docker or Systemd and provide the required configuration values. The container takes care of the runtime path, so users only need to build or start the image and set their settings.
 
 <details>
    <summary>What you need <kbd>Click Here</kbd></summary>
 
-   - Docker installed
+   - Docker installed or a Linux VPS with Python 3.10+
    - Your Telegram bot token and Telegram API credentials
    - A MongoDB connection string
    - The optional service credentials you want to enable, such as Drive, Rclone, Mega, JDownloader, or SABnzbd
@@ -125,27 +127,27 @@ Deploy with Docker and provide the required configuration values. The container 
       - System dependencies (`python3`, `pip`, `venv`, `ffmpeg`, `7z`, `aria2`, `rclone`, `qbittorrent-nox`, `git`, `curl`, `wget`, `lsof`, `procps`).
       - Sets up a Python virtual environment (`venv`) and installs project dependencies from `requirements.txt`.
       - Prepares required runtime directories (`downloads`, `thumbnails`, `tokens`, `rclone`, `cookies`, `Images`).
-      - Configures and enables a systemd service (`wzml_bot.service`) so the bot runs continuously.
+      - Configures and enables a systemd service (`htr_bot.service`) so the bot runs continuously.
       - Uses existing repository configuration without prompting to edit `config.py`.
 
    7. **Check if the bot is running:**
       ```bash
-      systemctl status wzml_bot
+      systemctl status htr_bot
       ```
 
    8. **View logs:**
       ```bash
-      journalctl -u wzml_bot -f
+      journalctl -u htr_bot -f
       ```
 
    9. **Restart the bot:**
       ```bash
-      systemctl restart wzml_bot
+      systemctl restart htr_bot
       ```
 
    10. **Stop the bot:**
        ```bash
-       systemctl stop wzml_bot
+       systemctl stop htr_bot
        ```
 
    11. **Update and redeploy the project:**
@@ -187,69 +189,14 @@ Deploy with Docker and provide the required configuration values. The container 
 </details>
 
 <details>
-   <summary>VPS with VPN (Gluetun)</summary>
-
-   1. Uncomment the `gluetun` service in `docker-compose.yml`
-   2. Fill in your VPN provider credentials
-   3. Set `network_mode: "service:gluetun"` on the `app` service
-   4. Start:
-
-   ```bash
-   docker buildx compose up -d
-   ```
-
-   All traffic (including the cloudflared tunnel) routes through the VPN.
-</details>
-
-<details>
-   <summary>Multi-Instance (Multiple Bots)</summary>
-
-   Each bot needs its own `config.py` and data volumes. Example for a second bot:
-
-   1. Create `config2.py` with different `BOT_TOKEN`, `OWNER_ID`, etc.
-   2. Uncomment `app2` and `tunnel2` in `docker-compose.yml`
-   3. Edit volume mounts to use `config2.py` and separate data dirs
-   4. Start:
-
-   ```bash
-   docker buildx compose up -d
-   ```
-
-   Each bot gets its own cloudflared tunnel URL. Admin ports (qBittorrent, SABnzbd) are mapped to different host ports (`127.0.0.1:8091`, etc.).
-</details>
-
-<details>
    <summary>Single Container (Manual)</summary>
 
    ```bash
    git clone https://github.com/SilentDemonSD/WZML-X.git
    cd WZML-X
-   docker build -t wzmlx .
-   docker run -p 8080:8080 wzmlx
+   docker build -t htrx .
+   docker run -p 8080:8080 htrx
    ```
-</details>
-
-<details>
-   <summary>Deployment Notes</summary>
-
-   1. If you use qBittorrent, tune `AsyncIOThreadsCount` to your machine size.
-   2. Stop the container before removing it, and remove the container before pruning images.
-   3. Useful cleanup commands:
-
-   ```bash
-   docker container prune
-   docker image prune -a
-   ```
-</details>
-
-<details>
-   <summary>Legacy Workflow Guide</summary>
-
-   Some users still rely on the external workflow path referenced by the previous README:
-
-   - [WZ Deploy workflow guide](https://github.com/SilentDemonSD/WZ-Deploy/tree/main?tab=readme-ov-file#2%EF%B8%8F%E2%83%A3-method-2-github-workflow-guide)
-
-   Keep this only if that workflow still matches your deployment style.
 </details>
 
 ## Configuration
@@ -278,79 +225,6 @@ Then tune the optional behavior from `config_sample.py`.
    | `WEB_PINCODE` | Protects web access to file selection |
 </details>
 
-<details>
-   <summary>How to Get & Set BASE_URL (HTTPS URL on VPS)</summary>
-
-   Telegram requires a valid **HTTPS** URL (starting with `https://`) for Telegram Web Apps (e.g. Torrent Selection, Merge Planner, Watermark positioning).
-
-   ### Option 1: Automatic Cloudflare Tunnel (docker-compose)
-   When using Docker Compose, a `cloudflared` tunnel runs automatically.
-   Get your HTTPS URL by running:
-   ```bash
-   docker compose logs tunnel | grep -oE 'https://[a-zA-Z0-9-]+\.trycloudflare\.com'
-   ```
-   Copy the URL (e.g., `https://random-name.trycloudflare.com`) and set it as `BASE_URL` in `config.py` or via Bot Settings.
-
-   ### Option 2: VPS Manual Cloudflare Quick Tunnel (Free HTTPS)
-   If running on a VPS without Docker, install `cloudflared` and expose local port `8080`:
-   ```bash
-   # Download and install cloudflared on Linux VPS
-   curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-   dpkg -i cloudflared.deb
-
-   # Run cloudflared tunnel pointing to web server (default port 8080)
-   cloudflared tunnel --url http://127.0.0.1:8080
-   ```
-   `cloudflared` will print your public HTTPS URL (e.g. `https://xxxx.trycloudflare.com`).
-   Set `BASE_URL = "https://xxxx.trycloudflare.com"` in `config.py`.
-
-   ### Option 3: Custom Domain with SSL (Nginx / Caddy / Reverse Proxy)
-   If you have a domain pointing to your VPS IP:
-   ```bash
-   # Caddy reverse proxy example (automatically manages HTTPS certificates)
-   caddy reverse-proxy --from yourdomain.com --to 127.0.0.1:8080
-   ```
-   Then set `BASE_URL = "https://yourdomain.com"` in `config.py`.
-</details>
-
-<details>
-   <summary>Integrations available in config</summary>
-
-   The sample config also covers:
-
-   - qBittorrent and Aria2-related controls
-   - JDownloader login details
-   - Mega credentials
-   - SABnzbd server definitions
-   - Google Drive settings
-   - RSS, search, media metadata, and logging controls
-</details>
-
-<details>
-   <summary>AllDebrid (<code>-ad</code>)</summary>
-
-   Set `ALLDEBRID_API_KEY` (default: empty, feature off) in `config_sample.py`,
-   in the environment, or from **Bot Settings → Config Variables → ALLDEBRID_API_KEY**.
-
-   Add `-ad` to a mirror/leech command to route the input through AllDebrid:
-
-   - `/mirror <filehost link> -ad` unlocks premium hosts (1fichier, rapidgator,
-     mega, ...) and hands the direct link to the normal downloader.
-   - `/leech <magnet> -ad` (or reply to a `.torrent` with `-ad`) uploads the
-     torrent to AllDebrid, waits for it to finish there, then downloads every
-     file from AllDebrid's CDN — aria2/qBittorrent are bypassed entirely.
-
-   `ALLDEBRID_NO_SEED_TIMEOUT` (default: `180`) caps how many seconds a magnet may
-   stall with no seeders and no download progress before the task is aborted.
-   Set it to `0` to disable the check and rely on AllDebrid's own dead-torrent
-   reporting instead.
-
-   The flag is documented in the mirror help menu under the **AllDebrid** button.
-   Without a key the task fails with `ALLDEBRID_API_KEY is not configured`;
-   without `-ad` nothing changes. Magnets stop after 3 min with no seeders and
-   2 h overall, and are removed from your AllDebrid history if the task fails.
-</details>
-
 ## Project Layout
 
 | Path | Purpose |
@@ -362,70 +236,10 @@ Then tune the optional behavior from `config_sample.py`.
 | `qBittorrent/` | Default qBittorrent configuration |
 | `sabnzbd/` | Default SABnzbd configuration |
 
-## Documentation
-
-> [!NOTE]
-> This documentation is still being expanded.
-
-- Full guides: `docs/`
-- Deployment notes: the docs site linked from the repository at WZ Docs
-- Configuration reference: `config_sample.py`
-
-## Support
-
-<details>
-   <summary>Join Community</summary>
-
-   - Telegram channel: https://t.me/WZML_X
-   - Support group: https://t.me/WZML_Support
-</details>
-
 ## Credits
 
-WZML-X is a fork of [mirror-leech-telegram-bot](https://github.com/anasty17/mirror-leech-telegram-bot). The base project belongs to [anasty17](https://github.com/anasty17) and upstream contributors.
-
-<details>
-   <summary>Bot Authors</summary>
-
-   <table>
-      <thead>
-         <tr>
-            <th>Avatar</th>
-            <th>Name</th>
-            <th>Role</th>
-            <th>Profile</th>
-         </tr>
-      </thead>
-      <tbody>
-         <tr>
-            <td><img src="https://avatars.githubusercontent.com/u/105407900?v=4" width="72" alt="SilentDemonSD"></td>
-            <td>SilentDemonSD</td>
-            <td>Author, UI design, and custom features</td>
-            <td><a href="https://github.com/SilentDemonSD">GitHub</a></td>
-         </tr>
-         <tr>
-            <td><img src="https://avatars.githubusercontent.com/u/93116400?v=4" width="72" alt="RjRiajul"></td>
-            <td>RjRiajul</td>
-            <td>Co-author and maintainer</td>
-            <td><a href="https://github.com/rjriajul">GitHub</a></td>
-         </tr>
-         <tr>
-            <td><img src="https://avatars.githubusercontent.com/u/113664541?v=4" width="72" alt="CodeWithWeeb"></td>
-            <td>CodeWithWeeb</td>
-            <td>Feature expansion and wrap-up improvements</td>
-            <td><a href="https://github.com/weebzone">GitHub</a></td>
-         </tr>
-         <tr>
-            <td><img src="https://avatars.githubusercontent.com/u/84721324?v=4" width="72" alt="Maverick"></td>
-            <td>Maverick</td>
-            <td>Co-author and bug testing</td>
-            <td><a href="https://github.com/MajnuRangeela">GitHub</a></td>
-         </tr>
-      </tbody>
-   </table>
-</details>
+HTR-X is a fork of [mirror-leech-telegram-bot](https://github.com/anasty17/mirror-leech-telegram-bot). The base project belongs to [anasty17](https://github.com/anasty17) and upstream contributors.
 
 ## License
 
 This project is distributed under the terms of the repository license. See [LICENSE](LICENSE) for the full text.
-

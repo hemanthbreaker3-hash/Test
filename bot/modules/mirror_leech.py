@@ -425,9 +425,11 @@ class Mirror(TaskListener):
 
                 await delete_message(prompt_msg)
 
-            self.manual_merge = saved_ht.get("merge", False)
-            if self.manual_merge:
-                self.auto_merge = True
+            ht_merge = saved_ht.get("merge", False)
+            self.manual_merge = ht_merge
+            self.auto_merge = ht_merge
+            if ht_merge:
+                self.merge_mode = saved_ht.get("merge_mode", getattr(self, "merge_mode", "normal"))
             self.manual_rm_stream = saved_ht.get("rm_stream", False)
             self.manual_reorder = saved_ht.get("reorder", False)
             self.reorder_aud = saved_ht.get("reorder_aud", [])
@@ -459,32 +461,7 @@ class Mirror(TaskListener):
                 return
 
         if isinstance(reply_to, list) and len(reply_to) > 0 and isinstance(reply_to[0], str):
-            self.bulk = reply_to
-            b_msg = input_list[:1]
-            self.options = " ".join(input_list[1:])
-            b_msg.append(f"{self.bulk[0]} -i {len(self.bulk)} {self.options}")
-            nextmsg = await send_message(self.message, " ".join(b_msg))
-            nextmsg = await self.client.get_messages(
-                chat_id=self.message.chat.id, message_ids=nextmsg.id
-            )
-            if self.message.from_user:
-                nextmsg.from_user = self.user
-            else:
-                nextmsg.sender_chat = self.user
-            await Mirror(
-                self.client,
-                nextmsg,
-                self.is_qbit,
-                self.is_leech,
-                self.is_jd,
-                self.is_nzb,
-                self.is_seedr,
-                self.is_uphoster,
-                self.same_dir,
-                self.bulk,
-                self.multi_tag,
-                self.options,
-            ).new_event()
+            await self._process_range_each_sequentially(reply_to)
             return
 
         if not reply_to:
@@ -708,6 +685,80 @@ class Mirror(TaskListener):
                 )
             await add_aria2_download(self, path, headers, ratio, seed_time)
 
+    async def _process_range_each_sequentially(self, range_links):
+        total_items = len(range_links)
+        LOGGER.info(f"Processing range link in 'each' mode: {total_items} items continuously.")
+
+        for idx, item_url in enumerate(range_links, start=1):
+            if self.is_cancelled:
+                LOGGER.info("Sequential range link processing cancelled by user.")
+                break
+
+            try:
+                sub_msg, sub_session = await get_tg_link_message(item_url, range_mode="normal")
+                tg_message = sub_msg[0] if isinstance(sub_msg, list) and sub_msg else sub_msg
+
+                if not tg_message:
+                    continue
+
+                sub_task = Mirror(
+                    client=self.client,
+                    message=self.message,
+                    is_qbit=self.is_qbit,
+                    is_leech=self.is_leech,
+                    is_jd=self.is_jd,
+                    is_nzb=self.is_nzb,
+                    is_seedr=self.is_seedr,
+                    is_uphoster=self.is_uphoster,
+                    options=self.options,
+                )
+                sub_task.link = item_url
+                sub_task.auto_merge = self.auto_merge
+                sub_task.manual_merge = self.manual_merge
+                sub_task.merge_mode = getattr(self, "merge_mode", "normal")
+                sub_task.compress = self.compress
+                sub_task.extract = self.extract
+                sub_task.thumb = self.thumb
+                sub_task.up_dest = self.up_dest
+                sub_task.dump_dest = self.dump_dest
+
+                sub_task.done_event = bot_loop.create_future()
+                await sub_task._run_single_range_item(tg_message, item_url, sub_session)
+                try:
+                    from asyncio import wait_for
+                    await wait_for(sub_task.done_event, timeout=7200)
+                except Exception as te:
+                    LOGGER.warning(f"Range task timeout or error for {item_url}: {te}")
+            except Exception as e:
+                LOGGER.error(f"Error processing range item {idx}/{total_items} ({item_url}): {e}")
+                continue
+
+            await sleep(1)
+
+    async def _run_single_range_item(self, reply_to, item_url, session):
+        path = f"{DOWNLOAD_DIR}{self.mid}{self.folder_name}"
+        self.link = item_url
+        await self.before_start()
+        self._set_mode_engine()
+
+        file_ = (
+            reply_to.document
+            or reply_to.photo
+            or reply_to.video
+            or reply_to.audio
+            or reply_to.voice
+            or reply_to.video_note
+            or reply_to.sticker
+            or reply_to.animation
+            or None
+        )
+        self.file_details = {"caption": reply_to.caption if hasattr(reply_to, "caption") else ""}
+
+        if file_ is not None or reply_to.text:
+            await TelegramDownloadHelper(self).add_download(
+                reply_to, f"{path}/", session
+            )
+
 
 
 
@@ -914,7 +965,7 @@ async def planner_callback(client, query):
 
     if not p_data:
         for k, v in list(planner_tasks.items()) + list(planner_store.items()):
-            if str(v.get("mid")) == str(mid) or str(v.get("user_id")) == str(user_id):
+            if str(v.get("mid")) == str(mid) and str(v.get("user_id")) == str(user_id):
                 p_data = v
                 key = k
                 break
@@ -1067,7 +1118,7 @@ async def start_merge_callback(client, query):
     if not p_data:
         all_sessions = list(planner_tasks.items()) + list(planner_store.items())
         for k, v in all_sessions:
-            if str(v.get("mid")) == str(mid) or str(v.get("user_id")) == str(user_id):
+            if str(v.get("mid")) == str(mid) and str(v.get("user_id")) == str(user_id):
                 p_data = v
                 key = k
                 break
