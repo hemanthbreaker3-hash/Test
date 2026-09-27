@@ -5,6 +5,14 @@ URL_SCHEMES = ("http://", "https://", "tg://")
 
 
 def _btn_style(style=None):
+    if isinstance(style, str):
+        st_upper = style.upper()
+        if st_upper == "PRIMARY":
+            return ButtonStyle.PRIMARY
+        if st_upper == "SUCCESS":
+            return ButtonStyle.SUCCESS
+        if st_upper == "DANGER":
+            return ButtonStyle.DANGER
     if style in (ButtonStyle.DANGER, ButtonStyle.SUCCESS, ButtonStyle.PRIMARY):
         return style
     return None

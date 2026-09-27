@@ -13,6 +13,8 @@ from .tg_client import TgClient
 
 
 async def add_handlers():
+    if hasattr(TgClient.bot, "dispatcher") and hasattr(TgClient.bot.dispatcher, "handlers"):
+        TgClient.bot.dispatcher.handlers.clear()
     TgClient.bot.add_handler(
         MessageHandler(
             authorize,
