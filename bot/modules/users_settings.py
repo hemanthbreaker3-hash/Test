@@ -851,9 +851,12 @@ Configure custom video encoding, compression, and watermark overlays for uploads
         wm_pos = user_dict.get("WM_POSITION", "Top-Left")
 
         if wm_user or wm_text or wm_img:
-            if Config.BASE_URL:
+            if Config.BASE_URL and str(Config.BASE_URL).startswith("https://"):
                 app_url = f"{Config.BASE_URL.rstrip('/')}/app/watermark"
-                buttons.web_app_button("📍 Position (Mini App)", app_url, position="header")
+                buttons.web_app_button("📍 Position (Web App)", app_url, position="header")
+            elif Config.BASE_URL:
+                app_url = f"{Config.BASE_URL.rstrip('/')}/app/watermark"
+                buttons.url_button("📍 Position (Web App)", app_url, position="header")
             else:
                 buttons.data_button("📍 Position", f"userset {user_id} wm_pos_select", position="header")
 

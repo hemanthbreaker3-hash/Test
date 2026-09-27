@@ -914,7 +914,7 @@ async def start_merge_callback(client, query):
     if not p_data:
         return await query.answer("Planner session expired or not found!", show_alert=True)
     if not p_data.get("saved"):
-        return await query.answer("Please save the planner in Mini App first!", show_alert=True)
+        return await query.answer("Please save the planner in Web App first!", show_alert=True)
     await query.answer("Starting merge...")
     fut = p_data.get("future")
     if fut and not fut.done():

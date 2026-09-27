@@ -1873,14 +1873,17 @@ class TaskConfig:
             buttons = ButtonMaker()
             if Config.BASE_URL:
                 planner_url = f"{Config.BASE_URL.rstrip('/')}/app/planner?mid={self.mid}&user_id={self.user_id}"
-                buttons.web_app_button("🧩 Open Mini Planner", planner_url)
+                if str(Config.BASE_URL).startswith("https://"):
+                    buttons.web_app_button("🧩 Open Merge Planner", planner_url)
+                else:
+                    buttons.url_button("🧩 Open Merge Planner", planner_url)
 
             planner_msg_text = (
-                f"<b>🧩 Mini Merge Planner</b>\n\n"
+                f"<b>🧩 Merge Planner</b>\n\n"
                 f"• <b>Default Output:</b> <code>{escape(out_filename)}</code>\n"
                 f"• <b>Files to Merge ({len(v_files)}):</b>\n"
                 + "\n".join([f"{idx + 1}. {escape(fn)}" for idx, fn in enumerate(file_names)])
-                + "\n\n<i>Open the Mini App below to reorder files or edit output filename.</i>"
+                + "\n\n<i>Open the App below to reorder files or edit output filename.</i>"
             )
 
             try:
@@ -1903,7 +1906,7 @@ class TaskConfig:
                 updated_files = p_data.get("files", file_names)
                 updated_out = p_data.get("output_filename", out_filename)
                 save_text = (
-                    f"<b>🧩 Mini Merge Planner (Saved)</b>\n\n"
+                    f"<b>🧩 Merge Planner (Saved)</b>\n\n"
                     f"• <b>Configured Output:</b> <code>{escape(updated_out)}</code>\n"
                     f"• <b>Configured File Order:</b>\n"
                     + "\n".join([f"{idx + 1}. {escape(fn)}" for idx, fn in enumerate(updated_files)])
@@ -1914,7 +1917,7 @@ class TaskConfig:
             async def on_delete(p_data):
                 if not fut.done():
                     fut.set_result(False)
-                await edit_message(dm_msg, "<b>🗑️ Mini Merge Planner Deleted. Using default merge order.</b>")
+                await edit_message(dm_msg, "<b>🗑️ Merge Planner Deleted. Using default merge order.</b>")
 
             planner_info["on_save_cb"] = on_save
             planner_info["on_delete_cb"] = on_delete
