@@ -62,7 +62,7 @@ class ButtonMaker:
                 )
                 btn_data = encoded[:64].decode("utf-8", errors="ignore")
         self.buttons[position if position in self.buttons else "default"].append(
-            InlineKeyboardButton(text=str(key), callback_data=btn_data, style=_btn_style(style))
+            InlineKeyboardButton(text=str(key), callback_data=btn_data, style=_btn_style(style) if style else None)
         )
 
     def build_menu(self, b_cols=1, h_cols=8, fb_cols=2, lb_cols=2, f_cols=8):

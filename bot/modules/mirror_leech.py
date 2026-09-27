@@ -251,7 +251,7 @@ class Mirror(TaskListener):
         )
         if user_auto_merge:
             self.auto_merge = True
-            self.merge_mode = self.user_dict.get("AUTO_MERGE_MODE", "normal")
+        self.merge_mode = self.user_dict.get("AUTO_MERGE_MODE", "normal")
 
 
         self.ht_flag = bool(args["-ht"] or "-ht" in self.options)
@@ -387,21 +387,42 @@ class Mirror(TaskListener):
                 def build_ht_menu(mid):
                     t_info = ht_tasks.get(mid, {})
                     m_on = "✓ ON" if t_info.get("merge") else "OFF"
-                    m_mode = t_info.get("merge_mode", "normal")
+                    m_mode = t_info.get("merge_mode", self.merge_mode)
                     tr_on = "✓ ON" if t_info.get("trim") else "OFF"
                     ex_on = "✓ ON" if t_info.get("extract") else "OFF"
 
                     buttons = ButtonMaker()
-                    buttons.data_button(f"Merge: {m_on}", f"htmerge merge {mid}", position="header")
+                    buttons.data_button(
+                        f"Merge: {m_on}",
+                        f"htmerge merge {mid}",
+                        position="header",
+                        style=ButtonStyle.SUCCESS if t_info.get("merge") else ButtonStyle.DANGER,
+                    )
                     if t_info.get("merge"):
                         n_st = "✓ " if m_mode == "normal" else ""
                         a_st = "✓ " if m_mode == "advanced" else ""
-                        buttons.data_button(f"{n_st}Normal Mode", f"htmerge setmode {mid} normal")
-                        buttons.data_button(f"{a_st}Advanced Mode", f"htmerge setmode {mid} advanced")
+                        buttons.data_button(
+                            f"{n_st}Normal Mode",
+                            f"htmerge setmode {mid} normal",
+                            style=ButtonStyle.SUCCESS if m_mode == "normal" else ButtonStyle.PRIMARY,
+                        )
+                        buttons.data_button(
+                            f"{a_st}Advanced Mode",
+                            f"htmerge setmode {mid} advanced",
+                            style=ButtonStyle.SUCCESS if m_mode == "advanced" else ButtonStyle.PRIMARY,
+                        )
 
-                    buttons.data_button(f"Trim: {tr_on}", f"htmerge trim {mid}")
-                    buttons.data_button(f"Extract: {ex_on}", f"htmerge extract {mid}")
-                    buttons.data_button("Done", f"htmerge done {mid}", position="footer")
+                    buttons.data_button(
+                        f"Trim: {tr_on}",
+                        f"htmerge trim {mid}",
+                        style=ButtonStyle.SUCCESS if t_info.get("trim") else ButtonStyle.DANGER,
+                    )
+                    buttons.data_button(
+                        f"Extract: {ex_on}",
+                        f"htmerge extract {mid}",
+                        style=ButtonStyle.SUCCESS if t_info.get("extract") else ButtonStyle.DANGER,
+                    )
+                    buttons.data_button("✨ Done", f"htmerge done {mid}", position="footer", style=ButtonStyle.SUCCESS)
                     return buttons
 
                 initial_merge = "✓ ON (Normal Mode)" if self.auto_merge or self.manual_merge else "OFF"
@@ -425,9 +446,17 @@ class Mirror(TaskListener):
 
                 await delete_message(prompt_msg)
 
-            self.manual_merge = saved_ht.get("merge", False)
-            if self.manual_merge:
-                self.auto_merge = True
+            if "merge" in saved_ht:
+                if not saved_ht["merge"]:
+                    self.auto_merge = False
+                    self.manual_merge = False
+                else:
+                    self.auto_merge = True
+                    self.manual_merge = True
+                    self.merge_mode = saved_ht.get("merge_mode") or self.user_dict.get("AUTO_MERGE_MODE", "normal")
+            else:
+                self.merge_mode = self.user_dict.get("AUTO_MERGE_MODE", "normal")
+
             self.manual_rm_stream = saved_ht.get("rm_stream", False)
             self.manual_reorder = saved_ht.get("reorder", False)
             self.reorder_aud = saved_ht.get("reorder_aud", [])
@@ -461,8 +490,12 @@ class Mirror(TaskListener):
         if isinstance(reply_to, list) and len(reply_to) > 0 and isinstance(reply_to[0], str):
             self.bulk = reply_to
             b_msg = input_list[:1]
-            self.options = " ".join(input_list[1:])
-            b_msg.append(f"{self.bulk[0]} -i {len(self.bulk)} {self.options}")
+            options_clean = " ".join(input_list[1:])
+            first_link = self.bulk[0]
+            if len(self.bulk) > 1:
+                b_msg.append(f"{first_link} -i {len(self.bulk)} {options_clean}".strip())
+            else:
+                b_msg.append(f"{first_link} {options_clean}".strip())
             nextmsg = await send_message(self.message, " ".join(b_msg))
             nextmsg = await self.client.get_messages(
                 chat_id=self.message.chat.id, message_ids=nextmsg.id
@@ -483,7 +516,7 @@ class Mirror(TaskListener):
                 self.same_dir,
                 self.bulk,
                 self.multi_tag,
-                self.options,
+                options_clean,
             ).new_event()
             return
 
@@ -729,16 +762,37 @@ async def ht_merge_callback(client, query):
         ex_on = "✓ ON" if t_info.get("extract") else "OFF"
 
         buttons = ButtonMaker()
-        buttons.data_button(f"Merge: {m_on}", f"htmerge merge {mid}", position="header")
+        buttons.data_button(
+            f"Merge: {m_on}",
+            f"htmerge merge {mid}",
+            position="header",
+            style=ButtonStyle.SUCCESS if t_info.get("merge") else ButtonStyle.DANGER,
+        )
         if t_info.get("merge"):
             n_st = "✓ " if m_mode == "normal" else ""
             a_st = "✓ " if m_mode == "advanced" else ""
-            buttons.data_button(f"{n_st}Normal Mode", f"htmerge setmode {mid} normal")
-            buttons.data_button(f"{a_st}Advanced Mode", f"htmerge setmode {mid} advanced")
+            buttons.data_button(
+                f"{n_st}Normal Mode",
+                f"htmerge setmode {mid} normal",
+                style=ButtonStyle.SUCCESS if m_mode == "normal" else ButtonStyle.PRIMARY,
+            )
+            buttons.data_button(
+                f"{a_st}Advanced Mode",
+                f"htmerge setmode {mid} advanced",
+                style=ButtonStyle.SUCCESS if m_mode == "advanced" else ButtonStyle.PRIMARY,
+            )
 
-        buttons.data_button(f"Trim: {tr_on}", f"htmerge trim {mid}")
-        buttons.data_button(f"Extract: {ex_on}", f"htmerge extract {mid}")
-        buttons.data_button("Done", f"htmerge done {mid}", position="footer")
+        buttons.data_button(
+            f"Trim: {tr_on}",
+            f"htmerge trim {mid}",
+            style=ButtonStyle.SUCCESS if t_info.get("trim") else ButtonStyle.DANGER,
+        )
+        buttons.data_button(
+            f"Extract: {ex_on}",
+            f"htmerge extract {mid}",
+            style=ButtonStyle.SUCCESS if t_info.get("extract") else ButtonStyle.DANGER,
+        )
+        buttons.data_button("✨ Done", f"htmerge done {mid}", position="footer", style=ButtonStyle.SUCCESS)
         return buttons
 
     def render_ht_text(mid):
