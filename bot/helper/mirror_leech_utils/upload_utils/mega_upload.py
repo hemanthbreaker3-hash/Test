@@ -152,6 +152,10 @@ async def _upload_file(
 
 
 async def add_mega_upload(listener, path, mega_email, mega_password, gid):
+    if MegaApi is None:
+        await listener.on_upload_error("MegaSDK not installed or failed to load.")
+        return
+
     if not mega_email or not mega_password:
         await listener.on_upload_error("Mega credentials not configured for this user.")
         return

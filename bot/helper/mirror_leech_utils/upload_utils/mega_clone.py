@@ -20,6 +20,10 @@ from ...mirror_leech_utils.status_utils.mega_status import MegaDownloadStatus
 
 
 async def add_mega_clone(listener, link, mega_email, mega_password, gid):
+    if MegaApi is None:
+        await listener.on_upload_error("MegaSDK not installed or failed to load.")
+        return None, 0, 0
+
     if not mega_email or not mega_password:
         await listener.on_upload_error("Mega credentials not configured for this user.")
         return None, 0, 0

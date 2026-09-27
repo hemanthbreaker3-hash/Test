@@ -1,6 +1,7 @@
 import re
 from asyncio import gather, sleep, wait_for
 from contextlib import suppress
+from html import escape
 from os import path as ospath, walk
 from pyrogram.types import Message
 from re import sub

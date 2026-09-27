@@ -423,6 +423,7 @@ async def get_user_settings(from_user, stype="main"):
     rclone_conf = f"rclone/{user_id}.conf"
     token_pickle = f"tokens/{user_id}.pickle"
     user_dict = user_data.get(user_id, {})
+    auto_thumb = "Disabled"
 
     if stype == "main":
         buttons.data_button(
