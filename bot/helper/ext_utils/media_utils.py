@@ -1412,6 +1412,7 @@ class FFMpeg:
 
 async def apply_thumbnail_watermark(thumb_path: str, user_dict: dict) -> str:
     import os
+    import random
     if not thumb_path or not await aiopath.exists(str(thumb_path)):
         return thumb_path
 
@@ -1429,6 +1430,20 @@ async def apply_thumbnail_watermark(thumb_path: str, user_dict: dict) -> str:
                 base_img = base_img.convert("RGBA")
                 w, h = base_img.size
 
+                pos_mode = str(wm_pos).strip()
+                std_positions = [
+                    "Top-Left", "Top-Center", "Top-Right",
+                    "Center-Left", "Center", "Center-Right",
+                    "Bottom-Left", "Bottom-Center", "Bottom-Right"
+                ]
+
+                if pos_mode in ("Auto Position", "Auto"):
+                    effective_pos = "Bottom-Right"
+                elif pos_mode in ("Random Position", "Random"):
+                    effective_pos = random.choice(std_positions)
+                else:
+                    effective_pos = pos_mode
+
                 if wm_img and os.path.exists(str(wm_img)):
                     with Image.open(wm_img) as watermark:
                         watermark = watermark.convert("RGBA")
@@ -1445,15 +1460,22 @@ async def apply_thumbnail_watermark(thumb_path: str, user_dict: dict) -> str:
                             Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS,
                         )
 
-                        x, y = 10, 10
-                        if "Center" in wm_pos:
-                            x = (w - wm_w) // 2
-                        elif "Right" in wm_pos:
-                            x = w - wm_w - 10
-                        if "Center" in wm_pos and "Top" not in wm_pos and "Bottom" not in wm_pos:
-                            y = (h - wm_h) // 2
-                        elif "Bottom" in wm_pos:
-                            y = h - wm_h - 10
+                        if "," in effective_pos and not any(p in effective_pos for p in ("Top", "Bottom", "Center", "Left", "Right")):
+                            try:
+                                px, py = map(int, effective_pos.split(","))
+                                x, y = max(0, min(px, w - wm_w)), max(0, min(py, h - wm_h))
+                            except ValueError:
+                                x, y = 10, 10
+                        else:
+                            x, y = 10, 10
+                            if "Center" in effective_pos:
+                                x = (w - wm_w) // 2
+                            elif "Right" in effective_pos:
+                                x = w - wm_w - 10
+                            if "Center" in effective_pos and "Top" not in effective_pos and "Bottom" not in effective_pos:
+                                y = (h - wm_h) // 2
+                            elif "Bottom" in effective_pos:
+                                y = h - wm_h - 10
 
                         base_img.paste(watermark, (x, y), watermark)
 
@@ -1473,18 +1495,25 @@ async def apply_thumbnail_watermark(thumb_path: str, user_dict: dict) -> str:
                     text_w = bbox[2] - bbox[0]
                     text_h = bbox[3] - bbox[1]
 
-                    x, y = 15, 15
-                    pos_lower = wm_pos.lower()
-                    if "center" in pos_lower and "top" not in pos_lower and "bottom" not in pos_lower and "left" not in pos_lower and "right" not in pos_lower:
-                        x = (w - text_w) // 2
-                        y = (h - text_h) // 2
+                    pos_lower = effective_pos.lower()
+                    if "," in effective_pos and not any(p in pos_lower for p in ("top", "bottom", "center", "left", "right")):
+                        try:
+                            px, py = map(int, effective_pos.split(","))
+                            x, y = max(0, min(px, w - text_w)), max(0, min(py, h - text_h))
+                        except ValueError:
+                            x, y = 15, 15
                     else:
-                        if "center" in pos_lower:
+                        x, y = 15, 15
+                        if "center" in pos_lower and "top" not in pos_lower and "bottom" not in pos_lower and "left" not in pos_lower and "right" not in pos_lower:
                             x = (w - text_w) // 2
-                        elif "right" in pos_lower:
-                            x = w - text_w - 15
-                        if "bottom" in pos_lower:
-                            y = h - text_h - 15
+                            y = (h - text_h) // 2
+                        else:
+                            if "center" in pos_lower:
+                                x = (w - text_w) // 2
+                            elif "right" in pos_lower:
+                                x = w - text_w - 15
+                            if "bottom" in pos_lower:
+                                y = h - text_h - 15
 
                     draw.text((x, y), wm_text, fill=(255, 255, 255, 230), font=font)
 

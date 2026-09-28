@@ -479,6 +479,12 @@ async def add_mega_download(listener, path):
             await async_api.getPublicNode(listener.link)
             if listener.is_cancelled or mega_listener.is_cancelled:
                 return
+            if mega_listener.error:
+                LOGGER.error(f"Mega getPublicNode error: {mega_listener.error}")
+                await listener.on_download_error(
+                    _mega_error_format(mega_listener.error)
+                )
+                return
             node = mega_listener.public_node
             if not node:
                 await listener.on_download_error("Failed to resolve MEGA link")
@@ -557,6 +563,12 @@ async def add_mega_download(listener, path):
             await async_api.wait_for_transfer()
 
             if listener.is_cancelled or dl_listener.is_cancelled:
+                return
+            if dl_listener.error and not dl_listener.retryable_error:
+                LOGGER.error(f"Mega download error: {dl_listener.error}")
+                await listener.on_download_error(
+                    _mega_error_format(dl_listener.error)
+                )
                 return
             if not dl_listener.retryable_error:
                 return

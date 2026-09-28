@@ -516,6 +516,9 @@ class TaskListener(TaskConfig):
                 user_thumb = self.user_dict.get("THUMBNAIL") or f"thumbnails/{self.user_id}.jpg"
                 if await aiopath.exists(user_thumb):
                     self.thumb = user_thumb
+            if self.thumb and await aiopath.exists(self.thumb):
+                from ..ext_utils.media_utils import apply_thumbnail_watermark
+                self.thumb = await apply_thumbnail_watermark(self.thumb, self.user_dict)
             tg = TelegramUploader(self, up_dir)
             async with task_dict_lock:
                 task_dict[self.mid] = TelegramStatus(
@@ -528,12 +531,13 @@ class TaskListener(TaskConfig):
             user_seq = self.user_dict.get("LEECH_SEQUENCE", False)
             if user_seq:
                 from asyncio import Lock
-                if not hasattr(TaskListener, "_user_upload_locks"):
-                    TaskListener._user_upload_locks = {}
-                if self.user_id not in TaskListener._user_upload_locks:
-                    TaskListener._user_upload_locks[self.user_id] = Lock()
-                u_lock = TaskListener._user_upload_locks[self.user_id]
-                async with u_lock:
+                if not hasattr(TaskListener, "_target_upload_locks"):
+                    TaskListener._target_upload_locks = {}
+                lock_key = (self.user_id, self.up_dest or self.message.chat.id)
+                if lock_key not in TaskListener._target_upload_locks:
+                    TaskListener._target_upload_locks[lock_key] = Lock()
+                target_lock = TaskListener._target_upload_locks[lock_key]
+                async with target_lock:
                     await gather(
                         update_status_message(self.message.chat.id),
                         tg.upload(),

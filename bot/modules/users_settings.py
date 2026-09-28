@@ -2320,7 +2320,8 @@ async def edit_user_settings(client, query):
             positions = [
                 "Top-Left", "Top-Center", "Top-Right",
                 "Center-Left", "Center", "Center-Right",
-                "Bottom-Left", "Bottom-Center", "Bottom-Right"
+                "Bottom-Left", "Bottom-Center", "Bottom-Right",
+                "Auto Position", "Random Position"
             ]
             for pos in positions:
                 state = "✓ " if pos == curr_pos else ""
@@ -2342,7 +2343,8 @@ async def edit_user_settings(client, query):
             positions = [
                 "Top-Left", "Top-Center", "Top-Right",
                 "Center-Left", "Center", "Center-Right",
-                "Bottom-Left", "Bottom-Center", "Bottom-Right"
+                "Bottom-Left", "Bottom-Center", "Bottom-Right",
+                "Auto Position", "Random Position"
             ]
             for pos in positions:
                 state = "✓ " if pos == curr_pos else ""
