@@ -5,7 +5,7 @@ WORKDIR /usr/src/app
 
 COPY requirements.txt .
 RUN uv pip install --python /wzvenv/bin/python --no-cache-dir -r requirements.txt
-RUN uv pip install --python /wzvenv/bin/python --no-cache-dir --no-deps "megasdk" "mega.py>=1.0.8"
+RUN uv pip install --python /wzvenv/bin/python --no-cache-dir --no-deps "mega.py>=1.0.8"
 
 COPY . .
 
