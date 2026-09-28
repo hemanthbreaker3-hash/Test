@@ -484,7 +484,13 @@ class YtDlp(TaskListener):
 
         self._set_mode_engine()
 
-        cookie_to_use = get_cookie_file(self.user_dict, self.user_id)
+        cookie_to_use, cookie_err = get_cookie_file(self.user_dict, self.user_id)
+        if cookie_err and not cookie_to_use:
+            await send_message(self.message, f"{self.tag} {cookie_err}")
+            await self.remove_from_same_dir()
+            await delete_links(self.message)
+            return
+
         if cookie_to_use and ospath.exists(cookie_to_use):
             LOGGER.info(
                 f"Using cookies.txt file: {cookie_to_use} | User ID : {self.user_id}"
@@ -492,14 +498,11 @@ class YtDlp(TaskListener):
 
         options = {
             "usenetrc": True,
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["android", "ios", "web", "mweb", "tv"],
-                }
-            },
         }
         if cookie_to_use and ospath.exists(cookie_to_use):
             options["cookiefile"] = cookie_to_use
+        else:
+            options.pop("cookiefile", None)
 
         if opt:
             for key, value in opt.items():
