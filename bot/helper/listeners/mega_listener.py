@@ -756,15 +756,16 @@ class MegaAppListener(MegaListener):
                 self.error = f"{err_code} {error.toString()}"
                 if err_code == MegaError.API_EINCOMPLETE:
                     self.retryable_error = self.error
+                    LOGGER.warning("Mega transfer incomplete (API_EINCOMPLETE): %s", self.error)
                     self._set_transfer_event()
                     return
-                LOGGER.error(f"Mega onTransferFinishError: {self.error}")
+                LOGGER.error("Mega onTransferFinish error [%s]: %s", err_code, self.error)
                 self.is_cancelled = True
-                if not self._upload_mode:
+                self._set_transfer_event()
+                if not self._upload_mode and not self._caller_manages_completion:
                     async_to_sync(
                         self.listener.on_download_error, _mega_error_format(self.error)
                     )
-                self._set_transfer_event()
                 return
             self.retryable_error = None
             if not self._caller_manages_completion:
@@ -1176,14 +1177,16 @@ class MegaFolderListener(MegaListener):
                 self.error = f"{err_code} {error.toString()}"
                 if err_code == MegaError.API_EINCOMPLETE:
                     self.retryable_error = self.error
+                    LOGGER.warning("MegaFolder transfer incomplete (API_EINCOMPLETE): %s", self.error)
                     self._set_transfer_event()
                     return
-                LOGGER.error(f"MegaFolder onTransferFinishError: {self.error}")
+                LOGGER.error("MegaFolder onTransferFinish error [%s]: %s", err_code, self.error)
                 self.is_cancelled = True
-                async_to_sync(
-                    self.listener.on_download_error, _mega_error_format(self.error)
-                )
                 self._set_transfer_event()
+                if not self._caller_manages_completion:
+                    async_to_sync(
+                        self.listener.on_download_error, _mega_error_format(self.error)
+                    )
                 return
             self.retryable_error = None
             async_to_sync(self.listener.on_download_complete)

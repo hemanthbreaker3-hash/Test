@@ -528,11 +528,16 @@ class TaskListener(TaskConfig):
             user_seq = self.user_dict.get("LEECH_SEQUENCE", False)
             if user_seq:
                 from asyncio import Lock
-                if not hasattr(TaskListener, "_user_upload_locks"):
-                    TaskListener._user_upload_locks = {}
-                if self.user_id not in TaskListener._user_upload_locks:
-                    TaskListener._user_upload_locks[self.user_id] = Lock()
-                u_lock = TaskListener._user_upload_locks[self.user_id]
+                if not hasattr(TaskListener, "_target_upload_locks"):
+                    TaskListener._target_upload_locks = {}
+                target_key = (
+                    self.user_id,
+                    self.up_dest or self.user_id,
+                    getattr(self, "chat_thread_id", None),
+                )
+                if target_key not in TaskListener._target_upload_locks:
+                    TaskListener._target_upload_locks[target_key] = Lock()
+                u_lock = TaskListener._target_upload_locks[target_key]
                 async with u_lock:
                     await gather(
                         update_status_message(self.message.chat.id),
