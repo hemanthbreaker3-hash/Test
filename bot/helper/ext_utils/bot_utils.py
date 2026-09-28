@@ -252,6 +252,10 @@ def arg_parser(items, arg_base):
         "-ad",
         "-seedr",
         "-ht",
+        "-trackmanager",
+        "-tr",
+        "-track",
+        "-tm",
     }
     if Config.DISABLE_BULK and "-b" in items:
         arg_base["-b"] = False
@@ -288,6 +292,10 @@ def arg_parser(items, arg_base):
                     "-yt",
                     "-ad",
                     "-ht",
+                    "-trackmanager",
+                    "-tr",
+                    "-track",
+                    "-tm",
                 ]
             ):
                 arg_base[part] = True

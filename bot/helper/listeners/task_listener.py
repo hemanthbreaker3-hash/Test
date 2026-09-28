@@ -282,6 +282,16 @@ class TaskListener(TaskConfig):
             self.size = await get_path_size(up_dir)
             self.clear()
 
+        if getattr(self, "track_manager", False):
+            from ..ext_utils.track_manager import proceed_track_manager
+            up_path = await proceed_track_manager(self, up_path, gid)
+            if self.is_cancelled or not up_path:
+                return
+            self.is_file = await aiopath.isfile(up_path)
+            self.name = up_path.replace(f"{up_dir}/", "").split("/", 1)[0]
+            self.size = await get_path_size(up_dir)
+            self.clear()
+
         if getattr(self, "manual_reorder", False) or getattr(self, "manual_rm_stream", False) or getattr(self, "reorder_aud", None) or getattr(self, "reorder_sub", None):
             up_path = await self.proceed_reorder(up_path, gid)
             if self.is_cancelled or not up_path:
