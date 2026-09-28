@@ -461,7 +461,7 @@ class Mirror(TaskListener):
                 return
 
         if isinstance(reply_to, list) and len(reply_to) > 0 and isinstance(reply_to[0], str):
-            await self._process_range_each_sequentially(reply_to)
+            bot_loop.create_task(self._process_range_each_sequentially(reply_to))
             return
 
         if not reply_to:
@@ -1039,20 +1039,35 @@ async def planner_callback(client, query):
             msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=target_page)
             await edit_message(p_data["msg"], msg_text, markup)
 
+    def sync_planner(mid_val, p_obj):
+        for k, v in list(planner_tasks.items()):
+            if str(v.get("mid")) == str(mid_val):
+                planner_tasks[k] = p_obj
+        for k, v in list(planner_store.items()):
+            if str(v.get("mid")) == str(mid_val):
+                planner_store[k] = p_obj
+
+    if cmd == "page":
+        target_page = int(data[3])
+        p_data["page"] = target_page
+        sync_planner(mid, p_data)
+        await query.answer(f"Page {target_page}")
+        if "format_ui" in p_data and "msg" in p_data:
+            msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=target_page)
+            await edit_message(p_data["msg"], msg_text, markup)
+
     elif cmd == "rmfile":
         idx = int(data[3])
         curr_page = int(data[4]) if len(data) > 4 else p_data.get("page", 1)
         files = p_data.get("files", [])
         if 0 <= idx < len(files):
             removed_file = files.pop(idx)
+            p_data["files"] = files
             if len(files) < 2:
-                p_data["files"] = files
                 await query.answer(f"Removed '{removed_file[:20]}'. Need at least 2 files to merge!", show_alert=True)
             else:
-                p_data["files"] = files
                 await query.answer(f"Removed '{removed_file[:20]}'")
-            planner_tasks[key] = p_data
-            planner_store[key] = p_data
+            sync_planner(mid, p_data)
             if "format_ui" in p_data and "msg" in p_data:
                 msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=curr_page)
                 await edit_message(p_data["msg"], msg_text, markup)
@@ -1067,8 +1082,7 @@ async def planner_callback(client, query):
             files[idx], files[target_idx] = files[target_idx], files[idx]
             p_data["files"] = files
             p_data["page"] = curr_page
-            planner_tasks[key] = p_data
-            planner_store[key] = p_data
+            sync_planner(mid, p_data)
             await query.answer("File reordered")
             if "format_ui" in p_data and "msg" in p_data:
                 msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=curr_page)
@@ -1077,8 +1091,7 @@ async def planner_callback(client, query):
     elif cmd == "reset":
         p_data["files"] = list(p_data.get("orig_files", []))
         curr_page = p_data.get("page", 1)
-        planner_tasks[key] = p_data
-        planner_store[key] = p_data
+        sync_planner(mid, p_data)
         await query.answer("Order reset to default")
         if "format_ui" in p_data and "msg" in p_data:
             msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=curr_page)

@@ -102,7 +102,7 @@ async def add_handlers():
     TgClient.bot.add_handler(
         MessageHandler(
             cancel_range_link,
-            filters=command(BotCommands.CancelRangeLinkCommand, case_sensitive=True)
+            filters=command(BotCommands.CancelRangeCommand, case_sensitive=True)
             & CustomFilters.authorized,
         )
     )

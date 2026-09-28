@@ -25,7 +25,7 @@ class BotCommands:
         "Search": "search",
         "Users": "users",
         "CancelTask": ["cancel", "c"],
-        "CancelRangeLink": ["cancelrl", "cancelrangelink", "cancel_rl"],
+        "CancelRange": ["cancelrange", "cancelrl", "cancelrangelink", "cancel_rl"],
         "CancelAll": ["cancelall", "call"],
         "ForceStart": ["forcestart", "fs"],
         "Status": ["status", "s", "statusall"],
