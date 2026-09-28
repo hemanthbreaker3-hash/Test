@@ -95,9 +95,12 @@ class YoutubeDLHelper:
             },
             "extractor_args": {
                 "youtube": {
-                    "player_client": ["ios", "web", "mweb", "tv"],
+                    "player_client": ["tv", "ios", "mweb", "web", "android"],
+                    "player_skip": ["webpage", "configs"],
                 }
             },
+            "concurrent_fragment_downloads": 3,
+            "ignoreerrors": True,
         }
         cookie_to_use = get_cookie_file(self._listener.user_dict, self._listener.user_id)
         self.opts["cookiefile"] = cookie_to_use
@@ -163,7 +166,10 @@ class YoutubeDLHelper:
         async_to_sync(self._listener.on_download_error, error)
 
     def _extract_meta_data(self):
-        with YoutubeDL(self.opts) as ydl:
+        opts = self.opts.copy()
+        if self.is_playlist:
+            opts["extract_flat"] = "in_playlist"
+        with YoutubeDL(opts) as ydl:
             try:
                 result = ydl.extract_info(self._listener.link, download=False)
                 if result is None:

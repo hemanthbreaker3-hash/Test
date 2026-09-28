@@ -7,7 +7,10 @@ from aiofiles.os import makedirs
 try:
     from mega import MegaApi, MegaCancelToken
 except (ImportError, SyntaxError, Exception):
-    MegaApi = MegaCancelToken = None
+    try:
+        from megasdk import MegaApi, MegaCancelToken
+    except (ImportError, SyntaxError, Exception):
+        MegaApi = MegaCancelToken = None
 
 from .... import LOGGER, task_dict, task_dict_lock, user_data
 from ....core.config_manager import Config
@@ -138,6 +141,10 @@ def _mega_py_download_sync(listener, path, email, password):
             m = re.search(r"/#!([^?]+)", url)
             if m:
                 return m.group(1)
+        if "/embed/" in url:
+            m = re.search(r"/embed/([^#?]+)#([^?]+)", url)
+            if m:
+                return f"{m.group(1)}!{m.group(2)}"
         if "!" in url:
             m = re.search(r"!?([a-zA-Z0-9_-]+![a-zA-Z0-9_-]+)", url)
             if m:

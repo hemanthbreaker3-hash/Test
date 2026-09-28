@@ -5,12 +5,15 @@ try:
     from mega import MegaApi, MegaError, MegaListener, MegaRequest
 except (ImportError, SyntaxError, Exception):
     try:
-        from mega import Mega as PyMega
-        MegaApi = MegaError = MegaRequest = None
+        from megasdk import MegaApi, MegaError, MegaListener, MegaRequest
     except (ImportError, SyntaxError, Exception):
-        PyMega = MegaApi = MegaError = MegaRequest = None
-    class MegaListener:
-        pass
+        try:
+            from mega import Mega as PyMega
+            MegaApi = MegaError = MegaRequest = None
+        except (ImportError, SyntaxError, Exception):
+            PyMega = MegaApi = MegaError = MegaRequest = None
+        class MegaListener:
+            pass
 
 from .bot_utils import sync_to_async
 from .status_utils import get_readable_file_size

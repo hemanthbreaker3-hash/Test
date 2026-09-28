@@ -124,40 +124,42 @@ class YtSelection:
             format_dict = result.get("formats")
             if format_dict is not None:
                 for item in format_dict:
-                    if item.get("tbr"):
-                        format_id = item["format_id"]
+                    if item.get("video_ext") == "none" and item.get("audio_ext") == "m4a":
+                        self._is_m4a = True
+                        break
 
-                        if item.get("filesize"):
-                            size = item["filesize"]
-                        elif item.get("filesize_approx"):
-                            size = item["filesize_approx"]
-                        else:
-                            size = 0
+                for item in format_dict:
+                    format_id = item.get("format_id")
+                    if not format_id:
+                        continue
 
-                        if item.get("video_ext") == "none" and (
-                            item.get("resolution") == "audio only"
-                            or item.get("acodec") != "none"
-                        ):
-                            if item.get("audio_ext") == "m4a":
-                                self._is_m4a = True
-                            b_name = f"{item.get('acodec') or format_id}-{item['ext']}"
-                            v_format = format_id
-                        elif item.get("height"):
-                            height = item["height"]
-                            ext = item["ext"]
-                            fps = item["fps"] if item.get("fps") else ""
-                            b_name = f"{height}p{fps}-{ext}"
-                            ba_ext = (
-                                "[ext=m4a]" if self._is_m4a and ext == "mp4" else ""
-                            )
-                            v_format = f"{format_id}+ba{ba_ext}/b[height=?{height}]"
-                        else:
-                            continue
+                    size = item.get("filesize") or item.get("filesize_approx") or 0
 
-                        self.formats.setdefault(b_name, {})[f"{item['tbr']}"] = [
-                            size,
-                            v_format,
-                        ]
+                    if item.get("video_ext") == "none" and (
+                        item.get("resolution") == "audio only"
+                        or item.get("acodec") != "none"
+                    ):
+                        b_name = f"{item.get('acodec') or format_id}-{item.get('ext', 'audio')}"
+                        v_format = format_id
+                    elif item.get("height"):
+                        height = item["height"]
+                        ext = item.get("ext", "mp4")
+                        fps = item.get("fps") if item.get("fps") else ""
+                        b_name = f"{height}p{fps}-{ext}"
+                        ba_ext = (
+                            "[ext=m4a]" if self._is_m4a and ext == "mp4" else ""
+                        )
+                        v_format = f"{format_id}+ba{ba_ext}/b[height=?{height}]"
+                    else:
+                        continue
+
+                    tbr = item.get("tbr") or (
+                        (item.get("vbr") or 0) + (item.get("abr") or 0)
+                    ) or format_id
+                    self.formats.setdefault(b_name, {})[f"{tbr}"] = [
+                        size,
+                        v_format,
+                    ]
 
                 for b_name, tbr_dict in self.formats.items():
                     if len(tbr_dict) == 1:
@@ -486,7 +488,18 @@ class YtDlp(TaskListener):
             f"Using cookies.txt file: {cookie_to_use} | User ID : {self.user_id}"
         )
 
-        options = {"usenetrc": True, "cookiefile": cookie_to_use}
+        options = {
+            "usenetrc": True,
+            "cookiefile": cookie_to_use,
+            "extract_flat": "in_playlist",
+            "ignoreerrors": True,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["tv", "ios", "mweb", "web", "android"],
+                    "player_skip": ["webpage", "configs"],
+                }
+            },
+        }
         if opt:
             for key, value in opt.items():
                 if key in ["postprocessors", "download_ranges"]:
@@ -498,7 +511,6 @@ class YtDlp(TaskListener):
                     else:
                         qual = value
                 options[key] = value
-        options["playlist_items"] = "0"
         try:
             result = await sync_to_async(extract_info, self.link, options)
         except Exception as e:

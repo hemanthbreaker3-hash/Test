@@ -6,7 +6,10 @@ from aiofiles.os import makedirs
 try:
     from mega import MegaApi
 except (ImportError, SyntaxError, Exception):
-    MegaApi = None
+    try:
+        from megasdk import MegaApi
+    except (ImportError, SyntaxError, Exception):
+        MegaApi = None
 
 from .... import LOGGER, task_dict, task_dict_lock
 from ...telegram_helper.message_utils import update_status_message
