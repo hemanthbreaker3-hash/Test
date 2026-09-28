@@ -346,6 +346,14 @@ async def tm_callback(client, query: CallbackQuery):
                         used_aud.add(pos)
                         break
 
+            if not new_aud_sel and cur_file["audio_tracks"] and f["audio_tracks"]:
+                for pos in cur_file["audio_order"]:
+                    if pos < len(f["audio_tracks"]):
+                        new_aud_order.append(pos)
+                        if pos in cur_file["selected_audio"]:
+                            new_aud_sel.add(pos)
+                        used_aud.add(pos)
+
             # Add remaining audio tracks at the end as unselected
             for pos in range(len(f["audio_tracks"])):
                 if pos not in used_aud:
@@ -366,6 +374,14 @@ async def tm_callback(client, query: CallbackQuery):
                         new_sub_sel.add(pos)
                         used_sub.add(pos)
                         break
+
+            if not new_sub_sel and cur_file["sub_tracks"] and f["sub_tracks"]:
+                for pos in cur_file["sub_order"]:
+                    if pos < len(f["sub_tracks"]):
+                        new_sub_order.append(pos)
+                        if pos in cur_file["selected_sub"]:
+                            new_sub_sel.add(pos)
+                        used_sub.add(pos)
 
             for pos in range(len(f["sub_tracks"])):
                 if pos not in used_sub:
