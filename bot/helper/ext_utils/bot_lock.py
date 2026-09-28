@@ -93,11 +93,12 @@ def get_system_resources_cached():
 class SmartLock:
     def __init__(self, pause_targets=None, max_slots=None):
         self._lock = Lock()
-        self._semaphore = Semaphore(1)
         self._pause_targets = pause_targets or []
         self._fixed_max = max_slots
         self._active = 0
         self._throttled = False
+        slots = max_slots if max_slots is not None else self._get_max_slots()
+        self._semaphore = Semaphore(slots)
 
     @property
     def throttled(self):
@@ -189,6 +190,6 @@ class SmartLock:
                 pass
 
 
-ff_lock = SmartLock(pause_targets=["nzb", "jd"], max_slots=1)
+ff_lock = SmartLock(pause_targets=["nzb", "jd"], max_slots=3)
 sab_par2_lock = SmartLock(pause_targets=["jd"])
 jd_heavy_lock = SmartLock(pause_targets=["nzb"])
