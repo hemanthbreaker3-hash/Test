@@ -99,12 +99,10 @@ class YoutubeDLHelper:
             },
             "extractor_args": {
                 "youtube": {
-                    "player_client": ["tv", "ios", "mweb", "web", "android"],
-                    "player_skip": ["webpage", "configs"],
+                    "player_client": ["android", "ios", "web", "mweb", "tv"],
                 }
             },
             "concurrent_fragment_downloads": 3,
-            "ignoreerrors": True,
         }
         cookie_to_use = get_cookie_file(self._listener.user_dict, self._listener.user_id)
         if cookie_to_use and ospath.exists(cookie_to_use):
@@ -176,6 +174,7 @@ class YoutubeDLHelper:
         opts = self.opts.copy()
         if self.is_playlist:
             opts["extract_flat"] = "in_playlist"
+            opts["ignoreerrors"] = True
         with YoutubeDL(opts) as ydl:
             try:
                 result = ydl.extract_info(self._listener.link, download=False)

@@ -492,12 +492,9 @@ class YtDlp(TaskListener):
 
         options = {
             "usenetrc": True,
-            "extract_flat": "in_playlist",
-            "ignoreerrors": True,
             "extractor_args": {
                 "youtube": {
-                    "player_client": ["tv", "ios", "mweb", "web", "android"],
-                    "player_skip": ["webpage", "configs"],
+                    "player_client": ["android", "ios", "web", "mweb", "tv"],
                 }
             },
         }
