@@ -123,7 +123,11 @@ class AsyncMega:
     def _request_type_for_name(self, name):
         request_types = {
             "login": getattr(MegaRequest, "TYPE_LOGIN", None),
-            "loginToFolder": getattr(MegaRequest, "TYPE_LOGIN", None),
+            "loginToFolder": (
+                getattr(MegaRequest, "TYPE_LOGIN", None),
+                getattr(MegaRequest, "TYPE_LOGIN_TO_FOLDER", None),
+                getattr(MegaRequest, "TYPE_GET_PUBLIC_NODE", None),
+            ),
             "fetchNodes": getattr(MegaRequest, "TYPE_FETCH_NODES", None),
             "getPublicNode": getattr(MegaRequest, "TYPE_GET_PUBLIC_NODE", None),
             "logout": getattr(MegaRequest, "TYPE_LOGOUT", None),
@@ -199,13 +203,17 @@ class AsyncMega:
         self._expected_request_type = MegaRequest.TYPE_EXPORT
         self._expected_request_source = "main"
         try:
-            await sync_to_async(
-                self.api.exportNode,
-                node,
-                expireTime,
-                writable,
-                megaHosted,
-            )
+            try:
+                await sync_to_async(
+                    self.api.exportNode,
+                    node,
+                    expireTime,
+                    writable,
+                    megaHosted,
+                )
+            except (TypeError, Exception):
+                await sync_to_async(self.api.exportNode, node)
+
             await wait_for(wrap_future(future), timeout=_REQUEST_TIMEOUT_SECONDS)
             ml = getattr(self, "_mega_listener", None)
             return getattr(ml, "_export_link", None) if ml else None
@@ -399,15 +407,10 @@ class AsyncMega:
         self._transfer_future = Future()
         LOGGER.info("Mega: startUpload for %s", customName)
 
-        options = MegaUploadOptions.createInstance()
-        options.fileName = customName
-        options.mtime = mtime
-        options.isSourceTemporary = False
-
         ml = getattr(self, "_mega_listener", None)
         if ml:
             ml._bytes_transferred = 0
-            ml._total_downloaded_bytes = 0
+            ml._total_downloaded_bytes = getattr(ml, "_total_downloaded_bytes", 0)
             ml._speed = 0
             ml._smoothed_speed = 0
             ml._target_handle = parentNode.getHandle() if parentNode else None
@@ -415,13 +418,37 @@ class AsyncMega:
             ml._uploaded_node_handle = None
             ml._export_link = None
 
-        await sync_to_async(
-            self.api.startUpload,
-            localPath,
-            parentNode,
-            cancelToken,
-            options,
-        )
+        if MegaUploadOptions is not None:
+            try:
+                options = MegaUploadOptions.createInstance()
+                options.fileName = customName
+                options.mtime = mtime
+                options.isSourceTemporary = False
+                await sync_to_async(
+                    self.api.startUpload,
+                    localPath,
+                    parentNode,
+                    cancelToken,
+                    options,
+                )
+                return
+            except Exception as e:
+                LOGGER.warning("startUpload with MegaUploadOptions failed, trying fallback: %s", e)
+
+        try:
+            await sync_to_async(
+                self.api.startUpload,
+                localPath,
+                parentNode,
+                customName,
+                cancelToken,
+            )
+        except Exception:
+            await sync_to_async(
+                self.api.startUpload,
+                localPath,
+                parentNode,
+            )
 
     def __getattr__(self, name):
         attr = getattr(self.api, name)
@@ -542,7 +569,11 @@ class MegaAppListener(MegaListener):
 
     def _is_expected_request(self, request_type):
         expected = self._async_api._expected_request_type
-        return expected is None or request_type == expected
+        if expected is None:
+            return True
+        if isinstance(expected, (tuple, list, set)):
+            return request_type in expected
+        return request_type == expected
 
     def _is_expected_source(self, source):
         expected = self._async_api._expected_request_source
@@ -552,7 +583,11 @@ class MegaAppListener(MegaListener):
         if self._upload_mode:
             try:
                 expected = getattr(self, "_target_name", None)
-                return expected is not None and transfer.getFileName() == expected
+                if expected is not None:
+                    tf_name = transfer.getFileName()
+                    if tf_name == expected or (isinstance(tf_name, str) and tf_name.endswith(expected)):
+                        return True
+                return transfer.getType() == getattr(MegaTransfer, "TYPE_UPLOAD", 1)
             except Exception:
                 return False
         if self._async_api._download_is_folder:
@@ -1083,7 +1118,13 @@ class MegaFolderListener(MegaListener):
                 self.node = root_node
                 if self.node:
                     self._cache_node_data(self.node)
-                    self._size = api.getSize(self.node)
+                    try:
+                        self._size = api.getSize(self.node)
+                    except Exception:
+                        try:
+                            self._size = self.node.getSize()
+                        except Exception:
+                            self._size = 0
                     try:
                         self._children = api.getChildren(self.node)
                     except Exception:

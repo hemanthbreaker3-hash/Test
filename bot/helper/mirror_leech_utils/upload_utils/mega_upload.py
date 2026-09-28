@@ -261,6 +261,8 @@ async def add_mega_upload(listener, path, mega_email, mega_password, gid):
                     )
                     if ok:
                         uploaded_files += 1
+                        mega_listener._total_downloaded_bytes += mega_listener._size
+                        mega_listener._bytes_transferred = 0
                     else:
                         if not listener.is_cancelled and not mega_listener.is_cancelled:
                             await listener.on_upload_error(f"MegaUpload failed for {f}")

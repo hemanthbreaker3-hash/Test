@@ -119,9 +119,21 @@ def _mega_py_download_sync(listener, path, email, password):
     import re
     try:
         from mega import Mega
+        from mega.errors import RequestError
         mega = Mega()
     except Exception as e:
         raise ImportError(f"Mega module import failed: {e}")
+
+    if not hasattr(RequestError, "_patched_for_str"):
+        _orig_req_init = RequestError.__init__
+        def _safe_req_init(self, message, code=None):
+            if isinstance(message, int):
+                _orig_req_init(self, message)
+            else:
+                self.message = str(message)
+                self.code = code
+        RequestError.__init__ = _safe_req_init
+        RequestError._patched_for_str = True
 
     def _patched_parse_url(self, url):
         url = url.strip().replace(" ", "")

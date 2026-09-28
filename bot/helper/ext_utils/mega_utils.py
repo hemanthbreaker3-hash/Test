@@ -187,8 +187,15 @@ def _get_mega_account_info_sync(email: str, password: str) -> str:
             account_info = m.get_storage_space()
             user_info = m.get_user() or {}
 
-            used_bytes = account_info.get("used", 0) if isinstance(account_info, dict) else 0
-            total_bytes = account_info.get("total", 0) if isinstance(account_info, dict) else 0
+            if isinstance(account_info, dict):
+                used_bytes = account_info.get("used", 0)
+                total_bytes = account_info.get("total", 0)
+            elif isinstance(account_info, (tuple, list)) and len(account_info) >= 2:
+                used_bytes = account_info[0]
+                total_bytes = account_info[1]
+            else:
+                used_bytes = total_bytes = 0
+
             pct = round((used_bytes / max(total_bytes, 1)) * 100, 2)
 
             text = (
