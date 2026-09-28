@@ -530,9 +530,10 @@ class TaskListener(TaskConfig):
                 from asyncio import Lock
                 if not hasattr(TaskListener, "_user_upload_locks"):
                     TaskListener._user_upload_locks = {}
-                if self.user_id not in TaskListener._user_upload_locks:
-                    TaskListener._user_upload_locks[self.user_id] = Lock()
-                u_lock = TaskListener._user_upload_locks[self.user_id]
+                seq_key = (self.user_id, self.up_dest)
+                if seq_key not in TaskListener._user_upload_locks:
+                    TaskListener._user_upload_locks[seq_key] = Lock()
+                u_lock = TaskListener._user_upload_locks[seq_key]
                 async with u_lock:
                     await gather(
                         update_status_message(self.message.chat.id),

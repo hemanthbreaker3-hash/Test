@@ -116,7 +116,23 @@ async def _release_link(link: str):
 
 
 def _mega_py_download_sync(listener, path, email, password):
-    import re
+    import re, os, tempfile, shutil
+    from pathlib import Path
+    try:
+        import mega.errors
+        from mega.errors import RequestError, _CODE_TO_DESCRIPTIONS
+        if hasattr(RequestError, "__init__"):
+            _orig_req_err_init = RequestError.__init__
+            def _fixed_req_err_init(self, message):
+                if isinstance(message, int) and message in _CODE_TO_DESCRIPTIONS:
+                    _orig_req_err_init(self, message)
+                else:
+                    self.code = message if isinstance(message, int) else -1
+                    self.message = str(message)
+            RequestError.__init__ = _fixed_req_err_init
+    except Exception:
+        pass
+
     try:
         from mega import Mega
         mega = Mega()
@@ -132,15 +148,26 @@ def _mega_py_download_sync(listener, path, email, password):
         if "/folder/" in url:
             m = re.search(r"/folder/([^#?]+)#([^?]+)", url)
             if m:
-                return f"{m.group(1)}!{m.group(2)}"
+                return f"folder!{m.group(1)}!{m.group(2)}"
         if "/#F!" in url:
             m = re.search(r"/#F!([^?]+)", url)
             if m:
-                return m.group(1)
+                val = m.group(1)
+                if "#" in val:
+                    parts = val.split("#", 1)
+                    return f"folder!{parts[0]}!{parts[1]}"
+                elif "!" in val:
+                    parts = val.split("!", 1)
+                    return f"folder!{parts[0]}!{parts[1]}"
+                return f"folder!{val}"
         if "/#!" in url:
             m = re.search(r"/#!([^?]+)", url)
             if m:
-                return m.group(1)
+                val = m.group(1)
+                if "#" in val:
+                    parts = val.split("#", 1)
+                    return f"{parts[0]}!{parts[1]}"
+                return val
         if "/embed/" in url:
             m = re.search(r"/embed/([^#?]+)#([^?]+)", url)
             if m:
@@ -153,122 +180,118 @@ def _mega_py_download_sync(listener, path, email, password):
 
     Mega._parse_url = _patched_parse_url
 
-    if not hasattr(Mega, "_orig_download_file"):
-        from mega.crypto import (
-            base64_to_a32,
-            decrypt_attr,
-            base64_url_decode,
-            a32_to_str,
-            get_chunks,
-            str_to_a32,
-        )
-        from Crypto.Cipher import AES
-        from Crypto.Util import Counter
-        import requests
-        import tempfile
-        import shutil
-        from pathlib import Path
-        import os
+    from mega.crypto import (
+        base64_to_a32,
+        decrypt_attr,
+        decrypt_key,
+        base64_url_decode,
+        a32_to_str,
+        get_chunks,
+        str_to_a32,
+    )
+    from Crypto.Cipher import AES
+    from Crypto.Util import Counter
+    import requests
 
-        _orig_download_file = Mega._download_file
+    def _fixed_download_file(self, file_handle, file_key, dest_path=None, dest_filename=None, is_public=False, file=None, folder_id=None):
+        if file is None:
+            if isinstance(file_key, str):
+                file_key = base64_to_a32(file_key)
+            if is_public:
+                file_data = self._api_request({'a': 'g', 'g': 1, 'p': file_handle})
+            else:
+                file_data = self._api_request({'a': 'g', 'g': 1, 'n': file_handle})
 
-        def _fixed_download_file(self, file_handle, file_key, dest_path=None, dest_filename=None, is_public=False, file=None):
-            if file is None:
-                if isinstance(file_key, str):
-                    file_key = base64_to_a32(file_key)
-                if is_public:
-                    file_data = self._api_request({'a': 'g', 'g': 1, 'p': file_handle})
-                else:
-                    file_data = self._api_request({'a': 'g', 'g': 1, 'n': file_handle})
+            if len(file_key) < 8:
+                file_key = tuple(file_key) + (0,) * (8 - len(file_key))
 
-                if len(file_key) < 8:
-                    file_key = tuple(file_key) + (0,) * (8 - len(file_key))
-
-                k = (file_key[0] ^ file_key[4], file_key[1] ^ file_key[5],
-                     file_key[2] ^ file_key[6], file_key[3] ^ file_key[7])
-                iv = file_key[4:6] + (0, 0)
-                meta_mac = file_key[6:8]
+            k = (file_key[0] ^ file_key[4], file_key[1] ^ file_key[5],
+                 file_key[2] ^ file_key[6], file_key[3] ^ file_key[7])
+            iv = file_key[4:6] + (0, 0)
+            meta_mac = file_key[6:8]
+        else:
+            if folder_id:
+                file_data = self._api_request({'a': 'g', 'g': 1, 'n': file['h']}, n=folder_id)
             else:
                 file_data = self._api_request({'a': 'g', 'g': 1, 'n': file['h']})
-                k = file['k']
-                iv = file['iv']
-                meta_mac = file['meta_mac']
+            k = file['k']
+            iv = file['iv']
+            meta_mac = file['meta_mac']
 
-            if len(k) < 8:
-                k = tuple(k) + (0,) * (8 - len(k))
-            if len(iv) < 4:
-                iv = tuple(iv) + (0,) * (4 - len(iv))
-            if len(meta_mac) < 2:
-                meta_mac = tuple(meta_mac) + (0,) * (2 - len(meta_mac))
+        if len(k) < 8:
+            k = tuple(k) + (0,) * (8 - len(k))
+        if len(iv) < 4:
+            iv = tuple(iv) + (0,) * (4 - len(iv))
+        if len(meta_mac) < 2:
+            meta_mac = tuple(meta_mac) + (0,) * (2 - len(meta_mac))
 
-            if 'g' not in file_data:
-                from mega.errors import RequestError
-                raise RequestError('File not accessible anymore')
-            file_url = file_data['g']
-            file_size = file_data['s']
-            attribs = base64_url_decode(file_data['at'])
-            attribs = decrypt_attr(attribs, k)
+        if not isinstance(file_data, dict) or 'g' not in file_data:
+            from mega.errors import RequestError
+            raise RequestError(f'File not accessible anymore or API error: {file_data}')
+        file_url = file_data['g']
+        file_size = file_data['s']
+        attribs = base64_url_decode(file_data['at'])
+        attribs = decrypt_attr(attribs, k)
 
-            if dest_filename is not None:
-                file_name = dest_filename
-            elif isinstance(attribs, dict) and 'n' in attribs:
-                file_name = attribs['n']
-            else:
-                file_name = f"mega_file_{file_handle or 'dl'}"
+        if dest_filename is not None:
+            file_name = dest_filename
+        elif isinstance(attribs, dict) and 'n' in attribs:
+            file_name = attribs['n']
+        else:
+            file_name = f"mega_file_{file_handle or 'dl'}"
 
-            input_file = requests.get(file_url, stream=True).raw
+        resp = requests.get(file_url, stream=True, timeout=60)
+        resp.raise_for_status()
+        input_file = resp.raw
 
-            if dest_path is None:
-                dest_path = ''
-            else:
-                dest_path += '/'
+        dest_dir = dest_path or '.'
+        os.makedirs(dest_dir, exist_ok=True)
 
-            with tempfile.NamedTemporaryFile(mode='w+b', prefix='megapy_', delete=False) as temp_output_file:
-                k_str = a32_to_str(k)
-                counter = Counter.new(128, initial_value=((iv[0] << 32) + iv[1]) << 64)
-                aes = AES.new(k_str, AES.MODE_CTR, counter=counter)
+        with tempfile.NamedTemporaryFile(mode='w+b', prefix='megapy_', dir=dest_dir, delete=False) as temp_output_file:
+            k_str = a32_to_str(k)
+            counter = Counter.new(128, initial_value=((iv[0] << 32) + iv[1]) << 64)
+            aes = AES.new(k_str, AES.MODE_CTR, counter=counter)
 
-                mac_str = '\0' * 16
-                mac_encryptor = AES.new(k_str, AES.MODE_CBC, mac_str.encode("utf8"))
-                iv_str = a32_to_str([iv[0], iv[1], iv[0], iv[1]])
+            mac_str = '\0' * 16
+            mac_encryptor = AES.new(k_str, AES.MODE_CBC, mac_str.encode("utf8"))
+            iv_str = a32_to_str([iv[0], iv[1], iv[0], iv[1]])
 
-                for chunk_start, chunk_size in get_chunks(file_size):
-                    chunk = input_file.read(chunk_size)
-                    chunk = aes.decrypt(chunk)
-                    temp_output_file.write(chunk)
+            for chunk_start, chunk_size in get_chunks(file_size):
+                chunk = input_file.read(chunk_size)
+                if not chunk:
+                    break
+                chunk = aes.decrypt(chunk)
+                temp_output_file.write(chunk)
 
-                    encryptor = AES.new(k_str, AES.MODE_CBC, iv_str)
-                    i = 0
-                    for i in range(0, len(chunk) - 16, 16):
-                        block = chunk[i:i + 16]
-                        encryptor.encrypt(block)
+                encryptor = AES.new(k_str, AES.MODE_CBC, iv_str)
+                i = 0
+                for i in range(0, len(chunk) - 16, 16):
+                    block = chunk[i:i + 16]
+                    encryptor.encrypt(block)
 
-                    if file_size > 16:
-                        if len(chunk) > 16:
-                            i += 16
-                        else:
-                            i = 0
+                if file_size > 16:
+                    if len(chunk) > 16:
+                        i += 16
                     else:
                         i = 0
+                else:
+                    i = 0
 
-                    block = chunk[i:i + 16]
-                    if len(block) % 16:
-                        block += b'\0' * (16 - (len(block) % 16))
-                    mac_str = mac_encryptor.encrypt(encryptor.encrypt(block))
+                block = chunk[i:i + 16]
+                if len(block) % 16:
+                    block += b'\0' * (16 - (len(block) % 16))
+                mac_str = mac_encryptor.encrypt(encryptor.encrypt(block))
 
-                    file_info = os.stat(temp_output_file.name)
-                    LOGGER.info('%s of %s downloaded', file_info.st_size, file_size)
-                file_mac = str_to_a32(mac_str)
-                if len(file_mac) < 4:
-                    file_mac = tuple(file_mac) + (0,) * (4 - len(file_mac))
-                if (file_mac[0] ^ file_mac[1], file_mac[2] ^ file_mac[3]) != meta_mac:
-                    LOGGER.debug("Mega MAC integrity check mismatch, proceeding with download.")
-                output_path = Path(dest_path + file_name)
-                shutil.move(temp_output_file.name, output_path)
-                return output_path
+            file_mac = str_to_a32(mac_str)
+            if len(file_mac) < 4:
+                file_mac = tuple(file_mac) + (0,) * (4 - len(file_mac))
+            if (file_mac[0] ^ file_mac[1], file_mac[2] ^ file_mac[3]) != meta_mac:
+                LOGGER.debug("Mega MAC integrity check mismatch, proceeding with download.")
+            output_path = Path(dest_dir) / file_name
+            shutil.move(temp_output_file.name, output_path)
+            return output_path
 
-        Mega._orig_download_file = _orig_download_file
-        Mega._download_file = _fixed_download_file
+    Mega._download_file = _fixed_download_file
 
     m = None
     if email and password:
@@ -280,8 +303,95 @@ def _mega_py_download_sync(listener, path, email, password):
     if m is None:
         m = mega.login()
 
-    downloaded_path = m.download_url(listener.link, dest_path=path)
-    return downloaded_path
+    parsed_url = m._parse_url(listener.link)
+
+    if parsed_url.startswith("folder!"):
+        parts = parsed_url.split("!")
+        folder_handle = parts[1]
+        folder_key_str = parts[2]
+        master_folder_key = base64_to_a32(folder_key_str)
+
+        res = m._api_request({'a': 'f', 'c': 1, 'r': 1}, n=folder_handle)
+        if not isinstance(res, dict) or 'f' not in res:
+            from mega.errors import RequestError
+            raise RequestError(f"Failed to fetch folder nodes: {res}")
+
+        nodes = res['f']
+        nodes_dict = {}
+        for node in nodes:
+            h = node['h']
+            p = node.get('p', '')
+            t = node.get('t', 0)
+            k_raw = node.get('k', '')
+            if '/' in k_raw:
+                k_raw = k_raw.split('/')[-1]
+            if ':' in k_raw:
+                k_raw = k_raw.split(':')[-1]
+
+            if k_raw:
+                dec_k = decrypt_key(base64_to_a32(k_raw), master_folder_key)
+            else:
+                dec_k = master_folder_key
+
+            if t == 0:
+                k = (dec_k[0] ^ dec_k[4], dec_k[1] ^ dec_k[5], dec_k[2] ^ dec_k[6], dec_k[3] ^ dec_k[7])
+                iv = dec_k[4:6] + (0, 0)
+                meta_mac = dec_k[6:8]
+                attribs = decrypt_attr(base64_url_decode(node['at']), k)
+            else:
+                attribs = decrypt_attr(base64_url_decode(node['at']), dec_k)
+                k, iv, meta_mac = None, None, None
+
+            name = attribs.get('n', f"node_{h}") if isinstance(attribs, dict) else f"node_{h}"
+            nodes_dict[h] = {
+                'h': h,
+                'p': p,
+                't': t,
+                'name': name,
+                'k': k,
+                'iv': iv,
+                'meta_mac': meta_mac,
+                'size': node.get('s', 0),
+            }
+
+        sub_handle = get_mega_subfolder_handle(listener.link)
+        root_h = sub_handle if sub_handle and sub_handle in nodes_dict else folder_handle
+
+        def get_node_path(node_h):
+            curr = nodes_dict.get(node_h)
+            if not curr:
+                return ""
+            parts = []
+            while curr and curr['h'] != root_h and curr['h'] in nodes_dict:
+                parts.append(curr['name'])
+                curr = nodes_dict.get(curr['p'])
+            if curr and curr['h'] == root_h:
+                parts.append(curr['name'])
+            parts.reverse()
+            return os.path.join(*parts) if parts else ""
+
+        root_node = nodes_dict.get(root_h)
+        base_folder_name = root_node['name'] if root_node else f"MEGA_Folder_{folder_handle}"
+        target_dir = os.path.join(path, base_folder_name)
+        os.makedirs(target_dir, exist_ok=True)
+
+        downloaded_any = False
+        for nh, nd in nodes_dict.items():
+            if nd['t'] == 0:
+                rel_path = get_node_path(nd['h'])
+                if sub_handle and not rel_path:
+                    continue
+                file_dir = os.path.join(path, os.path.dirname(rel_path)) if rel_path else target_dir
+                os.makedirs(file_dir, exist_ok=True)
+                m._download_file(nd['h'], None, dest_path=file_dir, dest_filename=nd['name'], is_public=True, file=nd, folder_id=folder_handle)
+                downloaded_any = True
+
+        if not downloaded_any:
+            raise ValueError("No files found or downloaded in MEGA folder")
+        return target_dir
+    else:
+        downloaded_path = m.download_url(listener.link, dest_path=path)
+        return downloaded_path
 
 
 async def _download_mega_py(listener, path, email, password):
@@ -316,10 +426,18 @@ async def _download_mega_py(listener, path, email, password):
     if listener.is_cancelled:
         return
 
-    res = await sync_to_async(_mega_py_download_sync, listener, path, email, password)
-    if not res or listener.is_cancelled:
-        return
-    await listener.on_download_complete()
+    try:
+        res = await sync_to_async(_mega_py_download_sync, listener, path, email, password)
+        if listener.is_cancelled:
+            return
+        if not res or not await aiopath.exists(str(res)):
+            await listener.on_download_error("MEGA download failed: Downloaded file or folder path not found.")
+            return
+        await listener.on_download_complete()
+    except Exception as e:
+        LOGGER.error(f"Error in _download_mega_py: {e}", exc_info=True)
+        if not listener.is_cancelled:
+            await listener.on_download_error(f"MEGA download failed: {e}")
 
 
 async def add_mega_download(listener, path):

@@ -235,7 +235,7 @@ class HypertgUpload(HypertgTransfer):
             LOGGER.error(f"HypertgUL fail {self._up_file}: {type(e).__name__}: {e}")
             raise
         finally:
-            if thumb and (thumb.endswith("_320.jpg") or thumb.endswith("_tg.jpg")) and await aiopath.exists(thumb):
+            if thumb and (thumb.endswith("_320.jpg") or thumb.endswith("_tg.jpg") or thumb.endswith("_wm.jpg")) and await aiopath.exists(thumb):
                 try:
                     await remove(thumb)
                 except Exception:
