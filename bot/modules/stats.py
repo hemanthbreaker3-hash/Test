@@ -88,7 +88,7 @@ commands = {
         [
             "python3",
             "-c",
-            "from mega import MegaApi; print(MegaApi('test').getVersion())",
+            "try:\n from mega import MegaApi\n print(MegaApi('test').getVersion())\nexcept Exception:\n try:\n  from megasdk import MegaApi\n  print(MegaApi('test').getVersion())\n except Exception:\n  print('N/A')",
         ],
         r"v?([\d.]+)",
     ),
