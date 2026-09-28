@@ -1970,18 +1970,14 @@ class TaskConfig:
                 res = await wait_for(fut, timeout=600)
                 if res and planner_info.get("saved"):
                     ordered_names = planner_info.get("files", [])
-                    reordered_v_files = [file_map[fn] for fn in ordered_names if fn in file_map]
-                    if reordered_v_files:
-                        v_files = reordered_v_files
+                    v_files = [file_map[fn] for fn in ordered_names if fn in file_map]
                     if p_out := planner_info.get("output_filename"):
                         out_filename = p_out
             except AsyncTimeoutError:
                 LOGGER.info(f"Merge Planner timed out after 10 min for {key}. Auto-saving default configuration.")
                 planner_info["saved"] = True
                 ordered_names = planner_info.get("files", file_names)
-                reordered_v_files = [file_map[fn] for fn in ordered_names if fn in file_map]
-                if reordered_v_files:
-                    v_files = reordered_v_files
+                v_files = [file_map[fn] for fn in ordered_names if fn in file_map]
                 if p_out := planner_info.get("output_filename"):
                     out_filename = p_out
                 with suppress(Exception):
@@ -1994,6 +1990,24 @@ class TaskConfig:
                 LOGGER.error(f"Error in Planner execution: {e}")
             finally:
                 planner_tasks.pop(key, None)
+
+        if not v_files and not a_files and not s_files:
+            LOGGER.info("Merge Planner left 0 files. Returning dl_path.")
+            return dl_path
+
+        if len(v_files) == 1 and not a_files and not s_files:
+            LOGGER.info("Merge Planner left only 1 video file. Returning single file.")
+            single_v = v_files[0]
+            if out_filename:
+                parent_d = ospath.dirname(single_v)
+                v_ext = ospath.splitext(single_v)[1]
+                target_n = out_filename if out_filename.lower().endswith(v_ext.lower()) else f"{out_filename}{v_ext}"
+                target_p = ospath.join(parent_d, target_n)
+                if single_v != target_p:
+                    await move(single_v, target_p)
+                    self.name = target_n
+                    return target_p
+            return single_v
 
         self.name = out_filename
         output_file = ospath.join(work_dir, out_filename)
