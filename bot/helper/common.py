@@ -1851,13 +1851,15 @@ class TaskConfig:
         else:
             out_filename = out_base
 
-        if getattr(self, "merge_mode", "normal") == "advanced" and len(v_files) > 1:
+        merge_mode = getattr(self, "merge_mode", None) or self.user_dict.get("AUTO_MERGE_MODE") or getattr(Config, "AUTO_MERGE_MODE", "normal")
+        if merge_mode == "advanced" and len(v_files) > 1:
             from bot import planner_tasks, bot_loop
             from web.wserver import planner_store
             key = f"{self.mid}_{self.user_id}"
             fut = bot_loop.create_future()
 
-            file_map = {ospath.basename(f): f for f in v_files}
+            files_to_plan = v_files
+            file_map = {ospath.basename(f): f for f in files_to_plan}
             file_names = list(file_map.keys())
 
             from time import time
@@ -1968,28 +1970,18 @@ class TaskConfig:
                 res = await wait_for(fut, timeout=600)
                 if res and planner_info.get("saved"):
                     ordered_names = planner_info.get("files", [])
-                    reordered_v_files = []
-                    for fn in ordered_names:
-                        if fn in file_map:
-                            reordered_v_files.append(file_map[fn])
-                    for orig in v_files:
-                        if orig not in reordered_v_files:
-                            reordered_v_files.append(orig)
-                    v_files = reordered_v_files
+                    reordered_v_files = [file_map[fn] for fn in ordered_names if fn in file_map]
+                    if reordered_v_files:
+                        v_files = reordered_v_files
                     if p_out := planner_info.get("output_filename"):
                         out_filename = p_out
             except AsyncTimeoutError:
                 LOGGER.info(f"Merge Planner timed out after 10 min for {key}. Auto-saving default configuration.")
                 planner_info["saved"] = True
                 ordered_names = planner_info.get("files", file_names)
-                reordered_v_files = []
-                for fn in ordered_names:
-                    if fn in file_map:
-                        reordered_v_files.append(file_map[fn])
-                for orig in v_files:
-                    if orig not in reordered_v_files:
-                        reordered_v_files.append(orig)
-                v_files = reordered_v_files
+                reordered_v_files = [file_map[fn] for fn in ordered_names if fn in file_map]
+                if reordered_v_files:
+                    v_files = reordered_v_files
                 if p_out := planner_info.get("output_filename"):
                     out_filename = p_out
                 with suppress(Exception):

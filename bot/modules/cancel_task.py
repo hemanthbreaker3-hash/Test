@@ -192,3 +192,84 @@ async def cancel_all_update(_, query):
         res = await cancel_all(data[1], user_id)
         if not res:
             await send_message(reply_to, f"<b>No matching active tasks found for {data[1]}!</b>")
+
+
+@new_task
+async def cancel_range_link(_, message):
+    from bot import active_range_tasks
+    from contextlib import suppress
+    user_id = (message.from_user or message.sender_chat).id
+    is_sudo = await CustomFilters.sudo("", message)
+
+    if is_sudo:
+        user_tasks = list(active_range_tasks.values())
+    else:
+        user_tasks = [t for t in active_range_tasks.values() if t.get("user_id") == user_id]
+
+    if not user_tasks:
+        return await send_message(message, "<b>No active range link tasks found to cancel!</b>")
+
+    if len(user_tasks) == 1:
+        rt = user_tasks[0]
+        rt["is_cancelled"] = True
+        if sub := rt.get("current_sub_task"):
+            sub.is_cancelled = True
+            with suppress(Exception):
+                await sub.cancel_task()
+        active_range_tasks.pop(rt["range_id"], None)
+        return await send_message(
+            message,
+            f"<b>🛑 Range Link Task Cancelled</b>\n\n<blockquote>• <b>Range ID:</b> <code>{rt['range_id']}</code>\n• <b>Progress:</b> <code>{rt.get('current_idx', 1)}/{rt.get('total_links', 1)}</code> items</blockquote>"
+        )
+
+    buttons = button_build.ButtonMaker()
+    for rt in user_tasks:
+        buttons.data_button(
+            f"Range {rt['range_id']} ({rt.get('current_idx', 1)}/{rt.get('total_links', 1)})",
+            f"cancelrl {rt['range_id']}"
+        )
+    buttons.data_button("❌ Close", "cancelrl close", style=ButtonStyle.DANGER)
+
+    prompt = (
+        f"<b>🛑 Active Range Link Tasks ({len(user_tasks)})</b>\n\n"
+        "<blockquote>Select a range link task below to cancel:</blockquote>"
+    )
+    can_msg = await send_message(message, prompt, buttons.build_menu(1))
+    await auto_delete_message(message, can_msg)
+
+
+@new_task
+async def cancel_range_link_cb(_, query):
+    from bot import active_range_tasks
+    from contextlib import suppress
+    data = query.data.split()
+    if len(data) < 2:
+        return await query.answer("Invalid request!", show_alert=True)
+
+    if data[1] == "close":
+        await query.answer()
+        return await delete_message(query.message)
+
+    range_id = data[1]
+    rt = active_range_tasks.get(range_id)
+
+    if not rt:
+        return await query.answer("Range link task already completed or not found!", show_alert=True)
+
+    user_id = query.from_user.id
+    is_sudo = await CustomFilters.sudo("", query)
+    if not is_sudo and rt.get("user_id") != user_id:
+        return await query.answer("This menu is not for you!", show_alert=True)
+
+    rt["is_cancelled"] = True
+    if sub := rt.get("current_sub_task"):
+        sub.is_cancelled = True
+        with suppress(Exception):
+            await sub.cancel_task()
+
+    active_range_tasks.pop(range_id, None)
+    await query.answer("Range link task cancelled!", show_alert=True)
+    await edit_message(
+        query.message,
+        f"<b>🛑 Range Link Task Cancelled</b>\n\n<blockquote>• <b>Range ID:</b> <code>{range_id}</code>\n• <b>Status:</b> Stopped by user.</blockquote>"
+    )

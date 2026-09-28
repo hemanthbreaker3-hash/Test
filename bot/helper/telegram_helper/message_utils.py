@@ -462,7 +462,7 @@ async def update_status_message(sid, force=False):
             status_dict[sid]["time"] = time()
 
 
-async def send_status_message(msg, user_id=0):
+async def send_status_message(msg, user_id=0, force_new=False):
     if intervals["stopAll"]:
         return
     sid = user_id or msg.chat.id
@@ -481,6 +481,16 @@ async def send_status_message(msg, user_id=0):
                     obj.cancel()
                     del intervals["status"][sid]
                 return
+
+            if not force_new and status_dict[sid].get("message"):
+                edited = await edit_message(
+                    status_dict[sid]["message"], text, buttons, block=False, photo="IMAGES"
+                )
+                if not isinstance(edited, str):
+                    status_dict[sid]["message"].text = text
+                    status_dict[sid]["time"] = time()
+                    return
+
             old_message = status_dict[sid]["message"]
             message = await send_message(
                 msg, text, buttons, block=False, photo="IMAGES"

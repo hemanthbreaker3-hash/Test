@@ -79,7 +79,7 @@ async def start(_, message):
     user_name = message.from_user.first_name if message.from_user else "User"
     reply_markup = await _build_start_buttons()
 
-    if len(message.command) > 1 and message.command[1] == "wzmlx":
+    if len(message.command) > 1 and message.command[1] in ("wzmlx", "htrx"):
         await delete_message(message)
     elif len(message.command) > 1 and message.command[1] != "start":
         decrypted_url = decode_slink(message.command[1])
@@ -130,7 +130,7 @@ async def start(_, message):
     if await CustomFilters.authorized(_, message):
         start_string = (
             f"<b>👋 Welcome, {escape(user_name)}!</b>\n\n"
-            f"<blockquote><b>WZML-X Bot</b> is ready to mirror and leech files, torrents, and cloud links to Telegram or Cloud Storage.</blockquote>\n\n"
+            f"<blockquote><b>HTR-X Bot</b> is ready to mirror and leech files, torrents, and cloud links to Telegram or Cloud Storage.</blockquote>\n\n"
             f"<b>💡 Commands & Help:</b> Use /{help_cmd} to view all available commands and guides.\n"
             f"<b>💬 Authorized Chats:</b> Click any of the authorized chat buttons below to access supported groups."
         )
@@ -149,7 +149,7 @@ async def start(_, message):
         )
     else:
         start_string = (
-            f"<b>👋 Welcome to WZML-X Bot, {escape(user_name)}!</b>\n\n"
+            f"<b>👋 Welcome to HTR-X Bot, {escape(user_name)}!</b>\n\n"
             f"<blockquote>Mirror and leech files, torrents, and links to Telegram or Cloud Storage.\n\n"
             f"<b>Note:</b> You are not authorized to use this bot instance directly in private.</blockquote>\n\n"
             f"<b>💬 Authorized Chats:</b> Join our authorized chats below to get access."
@@ -167,7 +167,7 @@ async def start(_, message):
 async def start_cb(_, query):
     user_id = query.from_user.id
     data = query.data.split()
-    if len(data) < 3:
+    if len(data) < 3 or data[0] != "start":
         return await query.answer("Invalid request!", show_alert=True)
     input_token = data[2]
     u_data = user_data.get(user_id, {})

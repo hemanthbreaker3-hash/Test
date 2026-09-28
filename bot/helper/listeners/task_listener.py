@@ -151,9 +151,7 @@ class TaskListener(TaskConfig):
                         if (g_chat, g_thread) not in start_dests:
                             start_dests.append((g_chat, g_thread))
 
-        for d_chat, d_thread in start_dests:
-            if d_chat and d_chat != self.message.chat.id:
-                await send_message(d_chat, start_dump_msg, message_thread_id=d_thread)
+        # Exclude task started notifications from dump chats
         if (
             self.is_super_chat
             and (Config.INC_TASK_NOTIFY or Config.INC_TASK_RESUME)
@@ -278,6 +276,15 @@ class TaskListener(TaskConfig):
         if self.extract and not self.is_nzb:
             up_path = await self.proceed_extract(up_path, gid)
             if self.is_cancelled:
+                return
+            self.is_file = await aiopath.isfile(up_path)
+            self.name = up_path.replace(f"{up_dir}/", "").split("/", 1)[0]
+            self.size = await get_path_size(up_dir)
+            self.clear()
+
+        if getattr(self, "manual_reorder", False) or getattr(self, "manual_rm_stream", False) or getattr(self, "reorder_aud", None) or getattr(self, "reorder_sub", None):
+            up_path = await self.proceed_reorder(up_path, gid)
+            if self.is_cancelled or not up_path:
                 return
             self.is_file = await aiopath.isfile(up_path)
             self.name = up_path.replace(f"{up_dir}/", "").split("/", 1)[0]
@@ -777,6 +784,9 @@ class TaskListener(TaskConfig):
             if self.mid in non_queued_up:
                 non_queued_up.remove(self.mid)
 
+        if hasattr(self, "done_event") and self.done_event and not self.done_event.done():
+            self.done_event.set_result(True)
+
         await start_from_queued()
 
     async def on_download_error(self, error, button=None, is_limit=False):
@@ -847,6 +857,9 @@ class TaskListener(TaskConfig):
                 non_queued_dl.remove(self.mid)
             if self.mid in non_queued_up:
                 non_queued_up.remove(self.mid)
+
+        if hasattr(self, "done_event") and self.done_event and not self.done_event.done():
+            self.done_event.set_result(False)
 
         await start_from_queued()
         await sleep(3)

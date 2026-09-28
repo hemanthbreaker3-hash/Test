@@ -41,7 +41,7 @@ class MirrorStatus:
     STATUS_FFMPEG = "FFmpeg Processing"
     STATUS_YT = "YouTube Uploading"
     STATUS_METADATA = "Applying Metadata"
-    STATUS_TRACKMGR = "Track Managering"
+    STATUS_TRACKMGR = "Track Manager"
     STATUS_SEEDR = "Seedr Downloading"
     STATUS_COMPLETED = "Completed"
 
@@ -53,7 +53,7 @@ class EngineStatus:
         self.STATUS_AIOHTTP = f"AioHttp v{ver.get('aiohttp', 'N/A')}"
         self.STATUS_GDAPI = f"Google-API v{ver.get('gapi', 'N/A')}"
         self.STATUS_QBIT = f"qBit v{ver.get('qBittorrent', 'N/A')}"
-        self.STATUS_TGRAM = f"WzPyro v{ver.get('wzgram', 'N/A')}"
+        self.STATUS_TGRAM = f"HTRGram v{ver.get('wzgram', 'N/A')}"
         self.STATUS_MEGA = f"MegaSDK v{ver.get('mega', 'N/A')}"
         self.STATUS_YTDLP = f"yt-dlp v{ver.get('yt-dlp', 'N/A')}"
         self.STATUS_FFMPEG = f"ffmpeg v{ver.get('ffmpeg', 'N/A')}"
@@ -204,22 +204,20 @@ def speed_string_to_bytes(size_text: str):
     return size
 
 
-def get_progress_bar_string(pct):
+def bar_wave(pct, width=10):
     try:
         p = float(str(pct).strip("%"))
     except Exception:
         p = 0.0
     p = min(max(p, 0), 100)
-    filled = int(round(p / 10))
-    p_bar = getattr(Config, "PROGRESS_BAR", "") or "■□"
-    if len(p_bar) >= 2:
-        fill_char = p_bar[0]
-        empty_char = p_bar[1]
-    else:
-        fill_char = "■"
-        empty_char = "□"
-    bar = fill_char * filled + empty_char * (10 - filled)
-    return f"[{bar}]"
+    heights = "▁▂▃▄▅▆▇█"
+    n = int(p / 100 * width)
+    bar = "".join(heights[min(7, int((i+1)/width*8))] if i < n else "▁" for i in range(width))
+    return f"┃{bar}┃ {p:.2f}%"
+
+
+def get_progress_bar_string(pct):
+    return bar_wave(pct)
 
 
 async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=1):
@@ -265,7 +263,7 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
             and task.listener.progress
         ):
             progress = task.progress()
-            task_details += f"┟ {get_progress_bar_string(progress)} <b>{progress}</b>\n"
+            task_details += f"┟ {get_progress_bar_string(progress)}\n"
             if task.listener.subname:
                 subsize = f" / {get_readable_file_size(task.listener.subsize)}"
                 ac = len(task.listener.files_to_proceed)

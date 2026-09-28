@@ -101,6 +101,16 @@ async def add_handlers():
     )
     TgClient.bot.add_handler(
         MessageHandler(
+            cancel_range_link,
+            filters=command(BotCommands.CancelRangeCommand, case_sensitive=True)
+            & CustomFilters.authorized,
+        )
+    )
+    TgClient.bot.add_handler(
+        CallbackQueryHandler(cancel_range_link_cb, filters=regex("^cancelrl"))
+    )
+    TgClient.bot.add_handler(
+        MessageHandler(
             cancel_all_buttons,
             filters=command(BotCommands.CancelAllCommand, case_sensitive=True)
             & CustomFilters.authorized,
@@ -368,7 +378,7 @@ async def add_handlers():
     )
     TgClient.bot.add_handler(CallbackQueryHandler(stats_pages, filters=regex("^stats")))
     TgClient.bot.add_handler(CallbackQueryHandler(log_cb, filters=regex("^log")))
-    TgClient.bot.add_handler(CallbackQueryHandler(start_cb, filters=regex("^start")))
+    TgClient.bot.add_handler(CallbackQueryHandler(start_cb, filters=regex("^start ")))
     TgClient.bot.add_handler(
         MessageHandler(
             torrent_search,

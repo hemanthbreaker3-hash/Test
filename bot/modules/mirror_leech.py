@@ -425,9 +425,11 @@ class Mirror(TaskListener):
 
                 await delete_message(prompt_msg)
 
-            self.manual_merge = saved_ht.get("merge", False)
-            if self.manual_merge:
-                self.auto_merge = True
+            ht_merge = saved_ht.get("merge", False)
+            self.manual_merge = ht_merge
+            self.auto_merge = ht_merge
+            if ht_merge:
+                self.merge_mode = saved_ht.get("merge_mode", getattr(self, "merge_mode", "normal"))
             self.manual_rm_stream = saved_ht.get("rm_stream", False)
             self.manual_reorder = saved_ht.get("reorder", False)
             self.reorder_aud = saved_ht.get("reorder_aud", [])
@@ -459,32 +461,7 @@ class Mirror(TaskListener):
                 return
 
         if isinstance(reply_to, list) and len(reply_to) > 0 and isinstance(reply_to[0], str):
-            self.bulk = reply_to
-            b_msg = input_list[:1]
-            self.options = " ".join(input_list[1:])
-            b_msg.append(f"{self.bulk[0]} -i {len(self.bulk)} {self.options}")
-            nextmsg = await send_message(self.message, " ".join(b_msg))
-            nextmsg = await self.client.get_messages(
-                chat_id=self.message.chat.id, message_ids=nextmsg.id
-            )
-            if self.message.from_user:
-                nextmsg.from_user = self.user
-            else:
-                nextmsg.sender_chat = self.user
-            await Mirror(
-                self.client,
-                nextmsg,
-                self.is_qbit,
-                self.is_leech,
-                self.is_jd,
-                self.is_nzb,
-                self.is_seedr,
-                self.is_uphoster,
-                self.same_dir,
-                self.bulk,
-                self.multi_tag,
-                self.options,
-            ).new_event()
+            bot_loop.create_task(self._process_range_each_sequentially(reply_to))
             return
 
         if not reply_to:
@@ -708,6 +685,136 @@ class Mirror(TaskListener):
                 )
             await add_aria2_download(self, path, headers, ratio, seed_time)
 
+    async def _process_range_each_sequentially(self, range_links):
+        from bot import active_range_tasks
+        total_items = len(range_links)
+        range_id = f"rl_{self.mid}"
+        range_info = {
+            "range_id": range_id,
+            "mid": self.mid,
+            "user_id": self.user_id,
+            "tag": self.tag,
+            "total_links": total_items,
+            "current_idx": 1,
+            "current_sub_task": None,
+            "is_cancelled": False,
+            "links": range_links,
+        }
+        active_range_tasks[range_id] = range_info
+        LOGGER.info(f"Processing range link in 'each' mode: {total_items} items continuously.")
+
+        try:
+            for idx, item_url in enumerate(range_links, start=1):
+                if range_info.get("is_cancelled") or self.is_cancelled:
+                    LOGGER.info("Sequential range link processing cancelled by user.")
+                    break
+
+                range_info["current_idx"] = idx
+
+                try:
+                    sub_msg, sub_session = await get_tg_link_message(item_url, range_mode="normal")
+                    tg_message = sub_msg[0] if isinstance(sub_msg, list) and sub_msg else sub_msg
+
+                    if not tg_message:
+                        continue
+
+                    sub_task = Mirror(
+                        client=self.client,
+                        message=self.message,
+                        is_qbit=self.is_qbit,
+                        is_leech=self.is_leech,
+                        is_jd=self.is_jd,
+                        is_nzb=self.is_nzb,
+                        is_seedr=self.is_seedr,
+                        is_uphoster=self.is_uphoster,
+                        options=self.options,
+                    )
+                    sub_task.link = item_url
+                    sub_task.as_doc = self.as_doc
+                    sub_task.as_med = self.as_med
+                    sub_task.compress = self.compress
+                    sub_task.extract = self.extract
+                    sub_task.name = self.name
+                    sub_task.folder_name = self.folder_name
+                    sub_task.manual_merge = self.manual_merge
+                    sub_task.auto_merge = self.auto_merge
+                    sub_task.merge_custom_name = getattr(self, "merge_custom_name", "")
+                    sub_task.merge_mode = getattr(self, "merge_mode", "normal")
+                    sub_task.up_dest = self.up_dest
+                    sub_task.dump_dest = self.dump_dest
+                    sub_task.category = self.category
+                    sub_task.rc_flags = self.rc_flags
+                    sub_task.thumb = self.thumb
+                    sub_task.split_size = self.split_size
+                    sub_task.sample_video = self.sample_video
+                    sub_task.screen_shots = self.screen_shots
+                    sub_task.convert_audio = self.convert_audio
+                    sub_task.convert_video = self.convert_video
+                    sub_task.name_swap = self.name_swap
+                    sub_task.hybrid_leech = self.hybrid_leech
+                    sub_task.thumbnail_layout = self.thumbnail_layout
+                    sub_task.ffmpeg_cmds = self.ffmpeg_cmds
+                    sub_task.ht_flag = self.ht_flag
+                    sub_task.manual_rm_stream = getattr(self, "manual_rm_stream", False)
+                    sub_task.manual_reorder = getattr(self, "manual_reorder", False)
+                    sub_task.reorder_aud = getattr(self, "reorder_aud", [])
+                    sub_task.reorder_sub = getattr(self, "reorder_sub", [])
+                    sub_task.aud_select = getattr(self, "aud_select", None)
+                    sub_task.sub_select = getattr(self, "sub_select", None)
+                    sub_task.aud_order = getattr(self, "aud_order", None)
+                    sub_task.sub_order = getattr(self, "sub_order", None)
+                    sub_task.manual_trim = getattr(self, "manual_trim", False)
+                    sub_task.trim_range = getattr(self, "trim_range", "")
+                    sub_task.manual_extract = getattr(self, "manual_extract", False)
+                    sub_task.extract_types = getattr(self, "extract_types", [])
+                    sub_task.metadata_dict = getattr(self, "metadata_dict", {}).copy()
+                    sub_task.audio_metadata_dict = getattr(self, "audio_metadata_dict", {}).copy()
+                    sub_task.video_metadata_dict = getattr(self, "video_metadata_dict", {}).copy()
+                    sub_task.subtitle_metadata_dict = getattr(self, "subtitle_metadata_dict", {}).copy()
+
+                    range_info["current_sub_task"] = sub_task
+                    sub_task.done_event = bot_loop.create_future()
+                    try:
+                        await sub_task._run_single_range_item(tg_message, item_url, sub_session)
+                        from asyncio import wait_for
+                        await wait_for(sub_task.done_event, timeout=7200)
+                    except Exception as te:
+                        LOGGER.warning(f"Range task timeout or error for {item_url}: {te}")
+                    finally:
+                        if hasattr(sub_task, "done_event") and not sub_task.done_event.done():
+                            sub_task.done_event.set_result(False)
+                except Exception as e:
+                    LOGGER.error(f"Error processing range item {idx}/{total_items} ({item_url}): {e}")
+                    continue
+
+                await sleep(1)
+        finally:
+            active_range_tasks.pop(range_id, None)
+
+    async def _run_single_range_item(self, reply_to, item_url, session):
+        path = f"{DOWNLOAD_DIR}{self.mid}{self.folder_name}"
+        self.link = item_url
+        await self.before_start()
+        self._set_mode_engine()
+
+        file_ = (
+            reply_to.document
+            or reply_to.photo
+            or reply_to.video
+            or reply_to.audio
+            or reply_to.voice
+            or reply_to.video_note
+            or reply_to.sticker
+            or reply_to.animation
+            or None
+        )
+        self.file_details = {"caption": reply_to.caption if hasattr(reply_to, "caption") else ""}
+
+        if file_ is not None or reply_to.text:
+            await TelegramDownloadHelper(self).add_download(
+                reply_to, f"{path}/", session
+            )
+
 
 
 
@@ -914,16 +1021,13 @@ async def planner_callback(client, query):
 
     if not p_data:
         for k, v in list(planner_tasks.items()) + list(planner_store.items()):
-            if str(v.get("mid")) == str(mid) or str(v.get("user_id")) == str(user_id):
+            if str(v.get("mid")) == str(mid):
                 p_data = v
                 key = k
                 break
 
     if not p_data:
         return await query.answer("Planner session expired or not found!", show_alert=True)
-
-    if query.from_user.id != p_data.get("user_id"):
-        return await query.answer("This planner session belongs to another user!", show_alert=True)
 
     elif cmd == "page":
         target_page = int(data[3])
@@ -935,20 +1039,35 @@ async def planner_callback(client, query):
             msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=target_page)
             await edit_message(p_data["msg"], msg_text, markup)
 
+    def sync_planner(mid_val, p_obj):
+        for k, v in list(planner_tasks.items()):
+            if str(v.get("mid")) == str(mid_val):
+                planner_tasks[k] = p_obj
+        for k, v in list(planner_store.items()):
+            if str(v.get("mid")) == str(mid_val):
+                planner_store[k] = p_obj
+
+    if cmd == "page":
+        target_page = int(data[3])
+        p_data["page"] = target_page
+        sync_planner(mid, p_data)
+        await query.answer(f"Page {target_page}")
+        if "format_ui" in p_data and "msg" in p_data:
+            msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=target_page)
+            await edit_message(p_data["msg"], msg_text, markup)
+
     elif cmd == "rmfile":
         idx = int(data[3])
         curr_page = int(data[4]) if len(data) > 4 else p_data.get("page", 1)
         files = p_data.get("files", [])
         if 0 <= idx < len(files):
             removed_file = files.pop(idx)
+            p_data["files"] = files
             if len(files) < 2:
-                p_data["files"] = files
                 await query.answer(f"Removed '{removed_file[:20]}'. Need at least 2 files to merge!", show_alert=True)
             else:
-                p_data["files"] = files
                 await query.answer(f"Removed '{removed_file[:20]}'")
-            planner_tasks[key] = p_data
-            planner_store[key] = p_data
+            sync_planner(mid, p_data)
             if "format_ui" in p_data and "msg" in p_data:
                 msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=curr_page)
                 await edit_message(p_data["msg"], msg_text, markup)
@@ -963,8 +1082,7 @@ async def planner_callback(client, query):
             files[idx], files[target_idx] = files[target_idx], files[idx]
             p_data["files"] = files
             p_data["page"] = curr_page
-            planner_tasks[key] = p_data
-            planner_store[key] = p_data
+            sync_planner(mid, p_data)
             await query.answer("File reordered")
             if "format_ui" in p_data and "msg" in p_data:
                 msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=curr_page)
@@ -973,8 +1091,7 @@ async def planner_callback(client, query):
     elif cmd == "reset":
         p_data["files"] = list(p_data.get("orig_files", []))
         curr_page = p_data.get("page", 1)
-        planner_tasks[key] = p_data
-        planner_store[key] = p_data
+        sync_planner(mid, p_data)
         await query.answer("Order reset to default")
         if "format_ui" in p_data and "msg" in p_data:
             msg_text, markup = p_data["format_ui"](p_data, is_dm=True, page=curr_page)
@@ -1067,7 +1184,7 @@ async def start_merge_callback(client, query):
     if not p_data:
         all_sessions = list(planner_tasks.items()) + list(planner_store.items())
         for k, v in all_sessions:
-            if str(v.get("mid")) == str(mid) or str(v.get("user_id")) == str(user_id):
+            if str(v.get("mid")) == str(mid):
                 p_data = v
                 key = k
                 break
@@ -1075,8 +1192,9 @@ async def start_merge_callback(client, query):
     if not p_data:
         return await query.answer("Planner session expired or not found!", show_alert=True)
 
-    if not p_data.get("saved"):
-        p_data["saved"] = True
+    p_data["saved"] = True
+    planner_tasks[key] = p_data
+    planner_store[key] = p_data
 
     await query.answer("Starting merge...")
     fut = p_data.get("future")

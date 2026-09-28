@@ -10,7 +10,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 APP_DIR=$(pwd)
-SERVICE_NAME="wzml_bot"
+SERVICE_NAME="htr_bot"
 
 echo "[1/6] Updating system and installing system dependencies..."
 export DEBIAN_FRONTEND=noninteractive
@@ -71,7 +71,7 @@ chmod +x start.sh setpkgs.sh tunnel.sh cron_boot.py 2>/dev/null || true
 echo "[4/6] Configuring systemd service..."
 cat <<EOF > /etc/systemd/system/${SERVICE_NAME}.service
 [Unit]
-Description=WZML Mirror Leech Bot Service
+Description=HTR Mirror Leech Bot Service
 After=network.target
 StartLimitIntervalSec=60
 StartLimitBurst=5
