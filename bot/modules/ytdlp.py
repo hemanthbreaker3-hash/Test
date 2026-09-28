@@ -484,13 +484,13 @@ class YtDlp(TaskListener):
         self._set_mode_engine()
 
         cookie_to_use = get_cookie_file(self.user_dict, self.user_id)
-        LOGGER.info(
-            f"Using cookies.txt file: {cookie_to_use} | User ID : {self.user_id}"
-        )
+        if cookie_to_use and ospath.exists(cookie_to_use):
+            LOGGER.info(
+                f"Using cookies.txt file: {cookie_to_use} | User ID : {self.user_id}"
+            )
 
         options = {
             "usenetrc": True,
-            "cookiefile": cookie_to_use,
             "extract_flat": "in_playlist",
             "ignoreerrors": True,
             "extractor_args": {
@@ -500,9 +500,18 @@ class YtDlp(TaskListener):
                 }
             },
         }
+        if cookie_to_use and ospath.exists(cookie_to_use):
+            options["cookiefile"] = cookie_to_use
+
         if opt:
             for key, value in opt.items():
                 if key in ["postprocessors", "download_ranges"]:
+                    continue
+                if key == "cookiefile":
+                    if value and ospath.exists(str(value)):
+                        options[key] = str(value)
+                    else:
+                        options.pop("cookiefile", None)
                     continue
                 if key == "format" and not self.select:
                     if value.startswith("ba/b-"):
@@ -511,6 +520,9 @@ class YtDlp(TaskListener):
                     else:
                         qual = value
                 options[key] = value
+
+        if "cookiefile" in options and not options["cookiefile"]:
+            del options["cookiefile"]
         try:
             result = await sync_to_async(extract_info, self.link, options)
         except Exception as e:
