@@ -1604,7 +1604,8 @@ class TaskConfig:
         wm_img = self.user_dict.get("WM_IMAGE") or getattr(Config, "WM_IMAGE", "")
         wm_size = self.user_dict.get("WM_SIZE") or getattr(Config, "WM_SIZE", "")
         wm_color = self.user_dict.get("WM_COLOR") or getattr(Config, "WM_COLOR", "white")
-        wm_pos = self.user_dict.get("WM_POSITION") or getattr(Config, "WM_POSITION", "Top-Left")
+        wm_img_pos = self.user_dict.get("WM_IMAGE_POSITION") or self.user_dict.get("WM_POSITION") or getattr(Config, "WM_POSITION", "Top-Left")
+        wm_text_pos = self.user_dict.get("WM_TEXT_POSITION") or self.user_dict.get("WM_POSITION") or getattr(Config, "WM_POSITION", "Top-Left")
 
         disp_text = wm_text or (f"@{wm_user}" if wm_user else "")
         img_path = ""
@@ -1629,7 +1630,15 @@ class TaskConfig:
             if self.is_cancelled:
                 return False
             LOGGER.info(f"Applying watermark to: {f_path}")
-            res = await ffmpeg.apply_watermark(f_path, text=disp_text, image_path=img_path, position=wm_pos, color=wm_color, size=wm_size)
+            res = await ffmpeg.apply_watermark(
+                f_path,
+                text=disp_text,
+                image_path=img_path,
+                color=wm_color,
+                size=wm_size,
+                image_position=wm_img_pos,
+                text_position=wm_text_pos,
+            )
             if res:
                 await remove(f_path)
                 await move(res, f_path)

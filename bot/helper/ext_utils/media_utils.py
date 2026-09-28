@@ -1106,7 +1106,7 @@ class FFMpeg:
             await remove(output)
         return False
 
-    async def apply_watermark(self, video_file, text="", image_path="", position="Top-Left", color="white", size=""):
+    async def apply_watermark(self, video_file, text="", image_path="", position="Top-Left", color="white", size="", image_position="", text_position=""):
         cores, threads = ffmpeg_layout()
         self.clear()
         self._total_time = (await get_media_info(video_file))[0]
@@ -1137,8 +1137,11 @@ class FFMpeg:
             "Bottom-Right": "main_w-overlay_w-10:main_h-overlay_h-10",
         }
 
+        img_pos = image_position or position
+        txt_pos = text_position or position
+
         if image_path and await aiopath.exists(image_path):
-            overlay_pos = pos_map_img.get(position, "10:10")
+            overlay_pos = pos_map_img.get(img_pos, "10:10")
             if size and str(size).strip().isdigit():
                 scale_w = int(str(size).strip())
                 filter_str = f"[1:v]scale={scale_w}:-1[wm];[0:v][wm]overlay={overlay_pos}[outv]"
@@ -1158,7 +1161,7 @@ class FFMpeg:
             ]
         elif text:
             escaped_text = text.replace(":", r"\:").replace("'", r"'\''")
-            text_pos = pos_map_text.get(position, "x=10:y=10")
+            text_pos = pos_map_text.get(txt_pos, "x=10:y=10")
             font_color = color or "white"
             font_size = str(size).strip() if size and str(size).strip().isdigit() else "24"
             vf = f"drawtext=text='{escaped_text}':fontcolor={font_color}:fontsize={font_size}:{text_pos}"
@@ -1461,8 +1464,18 @@ async def apply_thumbnail_watermark(thumb_path: str, user_dict: dict) -> str:
         or getattr(Config, "WM_SIZE", "30")
         or "30"
     )
-    wm_pos = (
-        user_dict.get("THUMB_WM_POSITION")
+    wm_img_pos = (
+        user_dict.get("THUMB_WM_IMAGE_POSITION")
+        or user_dict.get("THUMB_WM_POSITION")
+        or user_dict.get("WM_IMAGE_POSITION")
+        or user_dict.get("WM_POSITION")
+        or getattr(Config, "WM_POSITION", "Top-Left")
+        or "Top-Left"
+    )
+    wm_text_pos = (
+        user_dict.get("THUMB_WM_TEXT_POSITION")
+        or user_dict.get("THUMB_WM_POSITION")
+        or user_dict.get("WM_TEXT_POSITION")
         or user_dict.get("WM_POSITION")
         or getattr(Config, "WM_POSITION", "Top-Left")
         or "Top-Left"
@@ -1499,7 +1512,7 @@ async def apply_thumbnail_watermark(thumb_path: str, user_dict: dict) -> str:
                             Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS,
                         )
 
-                        x, y = _calc_wm_position(wm_pos, w, h, wm_w, wm_h, margin=15)
+                        x, y = _calc_wm_position(wm_img_pos, w, h, wm_w, wm_h, margin=15)
                         base_img.paste(watermark, (x, y), watermark)
 
                 elif wm_text:
@@ -1518,7 +1531,7 @@ async def apply_thumbnail_watermark(thumb_path: str, user_dict: dict) -> str:
                     text_w = bbox[2] - bbox[0]
                     text_h = bbox[3] - bbox[1]
 
-                    x, y = _calc_wm_position(wm_pos, w, h, text_w, text_h, margin=15)
+                    x, y = _calc_wm_position(wm_text_pos, w, h, text_w, text_h, margin=15)
                     font_fill = wm_color or "white"
                     try:
                         draw.text((x, y), wm_text, fill=font_fill, font=font)

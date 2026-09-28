@@ -41,10 +41,10 @@ class TestWatermarkSequenceMega(unittest.IsolatedAsyncioTestCase):
             img.save(img_path)
 
             user_dict = {
-                "WM_TEXT": "HTR Watermark",
-                "WM_POSITION": "Center",
-                "WM_COLOR": "yellow",
-                "WM_SIZE": "24",
+                "THUMB_WM_TEXT": "HTR Watermark",
+                "THUMB_WM_TEXT_POSITION": "Bottom-Right",
+                "THUMB_WM_COLOR": "cyan",
+                "THUMB_WM_SIZE": "24",
             }
 
             wm_path = await apply_thumbnail_watermark(img_path, user_dict)
@@ -54,6 +54,24 @@ class TestWatermarkSequenceMega(unittest.IsolatedAsyncioTestCase):
             # Test duplicate call returns same path without double watermarking
             dup_path = await apply_thumbnail_watermark(wm_path, user_dict)
             self.assertEqual(dup_path, wm_path)
+
+    async def test_apply_thumbnail_image_watermark(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_path = os.path.join(tmpdir, "base_thumb.jpg")
+            wm_img_path = os.path.join(tmpdir, "wm_logo.png")
+
+            Image.new("RGB", (500, 500), color="green").save(base_path)
+            Image.new("RGBA", (100, 100), color="red").save(wm_img_path)
+
+            user_dict = {
+                "THUMB_WM_IMAGE": wm_img_path,
+                "THUMB_WM_IMAGE_POSITION": "Top-Right",
+                "THUMB_WM_SIZE": "20",
+            }
+
+            res_path = await apply_thumbnail_watermark(base_path, user_dict)
+            self.assertTrue(os.path.exists(res_path))
+            self.assertTrue(res_path.endswith("_wm.jpg"))
 
     def test_sequence_upload_target_lock_keys(self):
         class DummyTaskListener:

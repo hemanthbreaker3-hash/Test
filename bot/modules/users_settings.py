@@ -413,6 +413,31 @@ user_settings_text = {
         "Thumbnail watermark overlay image.",
         "<blockquote>Send photo or Image URL for thumbnail watermark.\n⏱️ <b>Time Left:</b> <code>60 sec</code></blockquote>",
     ),
+    "THUMB_WM_COLOR": (
+        "String/Hex",
+        "Color for thumbnail text watermark.",
+        "<blockquote>Send text watermark color name or hex code (e.g. white, yellow, #FF0000).\n⏱️ <b>Time Left:</b> <code>60 sec</code></blockquote>",
+    ),
+    "WM_IMAGE_POSITION": (
+        "String",
+        "Position for image watermark.",
+        "<blockquote>Select position for image watermark.</blockquote>",
+    ),
+    "WM_TEXT_POSITION": (
+        "String",
+        "Position for text watermark.",
+        "<blockquote>Select position for text watermark.</blockquote>",
+    ),
+    "THUMB_WM_IMAGE_POSITION": (
+        "String",
+        "Position for thumbnail image watermark.",
+        "<blockquote>Select position for thumbnail image watermark.</blockquote>",
+    ),
+    "THUMB_WM_TEXT_POSITION": (
+        "String",
+        "Position for thumbnail text watermark.",
+        "<blockquote>Select position for thumbnail text watermark.</blockquote>",
+    ),
 }
 
 
@@ -715,12 +740,16 @@ Select thumbnail option for Telegram uploads:"""
         wm_text = user_dict.get("THUMB_WM_TEXT") or user_dict.get("WM_TEXT")
         wm_size = user_dict.get("THUMB_WM_SIZE") or user_dict.get("WM_SIZE") or "30"
         wm_img = user_dict.get("THUMB_WM_IMAGE") or user_dict.get("WM_IMAGE")
-        wm_pos = user_dict.get("THUMB_WM_POSITION") or user_dict.get("WM_POSITION") or "Top-Left"
+        wm_color = user_dict.get("THUMB_WM_COLOR") or user_dict.get("WM_COLOR") or "white"
+        wm_img_pos = user_dict.get("THUMB_WM_IMAGE_POSITION") or user_dict.get("THUMB_WM_POSITION") or user_dict.get("WM_IMAGE_POSITION") or user_dict.get("WM_POSITION") or "Top-Left"
+        wm_text_pos = user_dict.get("THUMB_WM_TEXT_POSITION") or user_dict.get("THUMB_WM_POSITION") or user_dict.get("WM_TEXT_POSITION") or user_dict.get("WM_POSITION") or "Top-Left"
 
         buttons.data_button("Watermark Text", f"userset {user_id} menu THUMB_WM_TEXT")
         buttons.data_button("Watermark Size", f"userset {user_id} menu THUMB_WM_SIZE")
         buttons.data_button("Photo / Image", f"userset {user_id} file THUMB_WM_IMAGE")
-        buttons.data_button("📍 Position", f"userset {user_id} thumb_wm_pos_select")
+        buttons.data_button("🎨 Text Color", f"userset {user_id} thumb_wm_color_select")
+        buttons.data_button("🖼️ Image Position", f"userset {user_id} thumb_wm_img_pos_select")
+        buttons.data_button("📝 Text Position", f"userset {user_id} thumb_wm_text_pos_select")
 
         buttons.data_button("◀️ Back", f"userset {user_id} thumb_select", "footer")
         buttons.data_button("❌ Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER)
@@ -730,8 +759,10 @@ Select thumbnail option for Telegram uploads:"""
 <blockquote>• <b>User:</b> {user_name}
 • <b>Watermark Text:</b> <code>{escape(str(wm_text or 'Not Set'))}</code>
 • <b>Watermark Size:</b> <code>{escape(str(wm_size))}</code>
+• <b>Text Color:</b> <code>{escape(str(wm_color))}</code>
 • <b>Photo/Image:</b> <code>{escape(str(wm_img or 'Not Set'))}</code>
-• <b>Position:</b> <b>{escape(str(wm_pos))}</b></blockquote>"""
+• <b>Image Position:</b> <b>{escape(str(wm_img_pos))}</b>
+• <b>Text Position:</b> <b>{escape(str(wm_text_pos))}</b></blockquote>"""
         btns = buttons.build_menu(2)
 
     elif stype == "enc_com_wm":
@@ -839,26 +870,19 @@ Configure custom video encoding, compression, and watermark overlays for uploads
         )
         buttons.data_button("Username", f"userset {user_id} menu WM_USERNAME")
         buttons.data_button("Text", f"userset {user_id} menu WM_TEXT")
-        buttons.data_button("Photo / Image URL", f"userset {user_id} menu WM_IMAGE")
+        buttons.data_button("Photo / Image URL", f"userset {user_id} file WM_IMAGE")
         buttons.data_button("Size / Scale", f"userset {user_id} menu WM_SIZE")
-        buttons.data_button("🎨 Text Color", f"userset {user_id} wm_color_select", position="header")
+        buttons.data_button("🎨 Text Color", f"userset {user_id} wm_color_select")
+        buttons.data_button("🖼️ Image Position", f"userset {user_id} wm_img_pos_select")
+        buttons.data_button("📝 Text Position", f"userset {user_id} wm_text_pos_select")
 
         wm_user = user_dict.get("WM_USERNAME")
         wm_text = user_dict.get("WM_TEXT")
         wm_img = user_dict.get("WM_IMAGE")
         wm_size = user_dict.get("WM_SIZE", "Default")
         wm_color = user_dict.get("WM_COLOR", "white")
-        wm_pos = user_dict.get("WM_POSITION", "Top-Left")
-
-        if wm_user or wm_text or wm_img:
-            if Config.BASE_URL and str(Config.BASE_URL).startswith("https://"):
-                app_url = f"{Config.BASE_URL.rstrip('/')}/app/watermark"
-                buttons.web_app_button("📍 Position (Web App)", app_url, position="header")
-            elif Config.BASE_URL:
-                app_url = f"{Config.BASE_URL.rstrip('/')}/app/watermark"
-                buttons.url_button("📍 Position (Web App)", app_url, position="header")
-            else:
-                buttons.data_button("📍 Position", f"userset {user_id} wm_pos_select", position="header")
+        wm_img_pos = user_dict.get("WM_IMAGE_POSITION") or user_dict.get("WM_POSITION") or "Top-Left"
+        wm_text_pos = user_dict.get("WM_TEXT_POSITION") or user_dict.get("WM_POSITION") or "Top-Left"
 
         buttons.data_button("◀️ Back", f"userset {user_id} enc_com_wm", "footer")
         buttons.data_button(
@@ -875,7 +899,8 @@ Configure custom video encoding, compression, and watermark overlays for uploads
 • <b>Photo/Image URL:</b> <code>{escape(str(wm_img or 'Not Set'))}</code>
 • <b>Size / Scale:</b> <code>{escape(str(wm_size))}</code>
 • <b>Text Color:</b> <code>{escape(str(wm_color))}</code>
-• <b>Selected Position:</b> <b>{escape(str(wm_pos))}</b></blockquote>"""
+• <b>Image Position:</b> <b>{escape(str(wm_img_pos))}</b>
+• <b>Text Position:</b> <b>{escape(str(wm_text_pos))}</b></blockquote>"""
 
     elif stype == "vtools":
         auto_merge = user_dict.get("AUTO_MERGE", False) or (
@@ -1700,6 +1725,31 @@ async def add_file(_, message, ftype, rfunc, target_user_id=None):
                 return
         else:
             des_dir = await create_thumb(message, user_id)
+    elif ftype in ["THUMB_WM_IMAGE", "WM_IMAGE"]:
+        await makedirs("watermark", exist_ok=True)
+        filename = f"{user_id}_thumb_wm.jpg" if ftype == "THUMB_WM_IMAGE" else f"{user_id}_wm.jpg"
+        target_path = f"watermark/{filename}"
+        if message.text and message.text.startswith(("http://", "https://")):
+            url = message.text.strip()
+            downloaded = await download_image_thumb(url)
+            if downloaded and await aiopath.exists(downloaded):
+                await move(downloaded, target_path)
+                des_dir = target_path
+            else:
+                await delete_message(message)
+                await send_message(message, "Failed to download image from URL!")
+                await rfunc()
+                return
+        else:
+            dl_path = await create_thumb(message, f"{user_id}_wm_tmp")
+            if dl_path and await aiopath.exists(dl_path):
+                await move(dl_path, target_path)
+                des_dir = target_path
+            else:
+                await delete_message(message)
+                await send_message(message, "Failed to process photo!")
+                await rfunc()
+                return
     elif ftype == "RCLONE_CONFIG":
         rpath = f"{getcwd()}/rclone/"
         await makedirs(rpath, exist_ok=True)
@@ -1947,6 +1997,18 @@ async def set_option(_, message, option, rfunc, target_user_id=None):
             await send_message(message, "Format must be 'KEY: command' or a dict {'KEY': ['cmd']}")
             return
         value = user_ff
+    elif option in ["THUMB_WM_IMAGE", "WM_IMAGE"]:
+        if value and value.startswith(("http://", "https://")):
+            downloaded = await download_image_thumb(value.strip())
+            if downloaded and await aiopath.exists(downloaded):
+                await makedirs("watermark", exist_ok=True)
+                filename = f"{user_id}_thumb_wm.jpg" if option == "THUMB_WM_IMAGE" else f"{user_id}_wm.jpg"
+                target_path = f"watermark/{filename}"
+                await move(downloaded, target_path)
+                value = target_path
+            else:
+                await send_message(message, "Failed to download image from URL!")
+                return
     elif option in ["UPLOAD_PATHS", "YT_DLP_OPTIONS", "DRIVE_CAT"]:
         if value.startswith("{") and value.endswith("}"):
             try:
@@ -1988,10 +2050,12 @@ async def get_menu(option, message, user_id, start=0):
         "RCLONE_CONFIG": f"rclone/{user_id}.conf",
         "TOKEN_PICKLE": f"tokens/{user_id}.pickle",
         "USER_COOKIE_FILE": f"cookies/{user_id}/cookies.txt",
+        "THUMB_WM_IMAGE": f"watermark/{user_id}_thumb_wm.jpg",
+        "WM_IMAGE": f"watermark/{user_id}_wm.jpg",
     }
 
     buttons = ButtonMaker()
-    if option in ["THUMBNAIL", "RCLONE_CONFIG", "TOKEN_PICKLE", "USER_COOKIE_FILE", "WM_IMAGE"]:
+    if option in ["THUMBNAIL", "RCLONE_CONFIG", "TOKEN_PICKLE", "USER_COOKIE_FILE", "THUMB_WM_IMAGE", "WM_IMAGE"]:
         key = "file"
     else:
         key = "set"
@@ -2002,12 +2066,12 @@ async def get_menu(option, message, user_id, start=0):
             buttons.data_button("Delete Specific Preset", f"userset {user_id} rmone FFMPEG_CMDS")
             buttons.data_button("Reset All Presets", f"userset {user_id} reset FFMPEG_CMDS")
     else:
-        if option == "WM_IMAGE":
-            buttons.data_button("Set Image URL / Text", f"userset {user_id} set WM_IMAGE")
         buttons.data_button(
             "Change" if user_dict.get(option, False) else "Set",
             f"userset {user_id} {key} {option}",
         )
+        if option in ["THUMB_WM_IMAGE", "WM_IMAGE"]:
+            buttons.data_button("Set Image URL Text", f"userset {user_id} set {option}")
         if user_dict.get(option, False):
             if option == "THUMBNAIL":
                 buttons.data_button(
@@ -2306,16 +2370,36 @@ async def edit_user_settings(client, query):
             buttons.data_button("◀️ Back", f"userset {user_id} watermark_menu", "footer")
             buttons.data_button("❌ Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER)
             await edit_message(message, "<b>🎨 Select Text Watermark Color:</b>", buttons.build_menu(2))
-    elif data[2] == "thumb_wm_pos_select":
+    elif data[2] == "thumb_wm_color_select":
         await query.answer()
         user_dict = user_data.get(user_id, {})
         if len(data) > 3:
-            new_pos = data[3]
-            update_user_ldata(user_id, "THUMB_WM_POSITION", new_pos)
+            new_color = data[3]
+            update_user_ldata(user_id, "THUMB_WM_COLOR", new_color)
             await database.update_user_data(user_id)
             await update_user_settings(query, "thumb_wm_menu")
         else:
-            curr_pos = user_dict.get("THUMB_WM_POSITION") or user_dict.get("WM_POSITION") or "Top-Left"
+            curr_color = user_dict.get("THUMB_WM_COLOR") or user_dict.get("WM_COLOR") or "white"
+            buttons = ButtonMaker()
+            colors = ["white", "black", "red", "green", "blue", "yellow", "cyan", "magenta"]
+            for col in colors:
+                state = "✓ " if col == curr_color else ""
+                buttons.data_button(f"{state}{col.capitalize()}", f"userset {user_id} thumb_wm_color_select {col}")
+            buttons.data_button("Custom Hex Color", f"userset {user_id} menu THUMB_WM_COLOR", "header")
+            buttons.data_button("◀️ Back", f"userset {user_id} thumb_wm_menu", "footer")
+            buttons.data_button("❌ Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER)
+            await edit_message(message, "<b>🎨 Select Thumbnail Text Watermark Color:</b>", buttons.build_menu(2))
+    elif data[2] in ["thumb_wm_img_pos_select", "thumb_wm_text_pos_select"]:
+        await query.answer()
+        user_dict = user_data.get(user_id, {})
+        opt_key = "THUMB_WM_IMAGE_POSITION" if data[2] == "thumb_wm_img_pos_select" else "THUMB_WM_TEXT_POSITION"
+        if len(data) > 3:
+            new_pos = data[3]
+            update_user_ldata(user_id, opt_key, new_pos)
+            await database.update_user_data(user_id)
+            await update_user_settings(query, "thumb_wm_menu")
+        else:
+            curr_pos = user_dict.get(opt_key) or user_dict.get("THUMB_WM_POSITION") or user_dict.get("WM_POSITION") or "Top-Left"
             buttons = ButtonMaker()
             positions = [
                 "Top-Left", "Top-Center", "Top-Right",
@@ -2324,20 +2408,22 @@ async def edit_user_settings(client, query):
             ]
             for pos in positions:
                 state = "✓ " if pos == curr_pos else ""
-                buttons.data_button(f"{state}{pos}", f"userset {user_id} thumb_wm_pos_select {pos}")
+                buttons.data_button(f"{state}{pos}", f"userset {user_id} {data[2]} {pos}")
             buttons.data_button("◀️ Back", f"userset {user_id} thumb_wm_menu", "footer")
             buttons.data_button("❌ Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER)
-            await edit_message(message, "<b>📍 Select Thumbnail Watermark Position:</b>", buttons.build_menu(3))
-    elif data[2] == "wm_pos_select":
+            title = "🖼️ Image" if "img" in data[2] else "📝 Text"
+            await edit_message(message, f"<b>📍 Select Thumbnail {title} Watermark Position:</b>", buttons.build_menu(3))
+    elif data[2] in ["wm_img_pos_select", "wm_text_pos_select", "wm_pos_select"]:
         await query.answer()
         user_dict = user_data.get(user_id, {})
+        opt_key = "WM_IMAGE_POSITION" if data[2] == "wm_img_pos_select" else ("WM_TEXT_POSITION" if data[2] == "wm_text_pos_select" else "WM_POSITION")
         if len(data) > 3:
             new_pos = data[3]
-            update_user_ldata(user_id, "WM_POSITION", new_pos)
+            update_user_ldata(user_id, opt_key, new_pos)
             await database.update_user_data(user_id)
             await update_user_settings(query, "watermark_menu")
         else:
-            curr_pos = user_dict.get("WM_POSITION", "Top-Left")
+            curr_pos = user_dict.get(opt_key) or user_dict.get("WM_POSITION") or "Top-Left"
             buttons = ButtonMaker()
             positions = [
                 "Top-Left", "Top-Center", "Top-Right",
@@ -2346,10 +2432,11 @@ async def edit_user_settings(client, query):
             ]
             for pos in positions:
                 state = "✓ " if pos == curr_pos else ""
-                buttons.data_button(f"{state}{pos}", f"userset {user_id} wm_pos_select {pos}")
+                buttons.data_button(f"{state}{pos}", f"userset {user_id} {data[2]} {pos}")
             buttons.data_button("◀️ Back", f"userset {user_id} watermark_menu", "footer")
             buttons.data_button("❌ Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER)
-            await edit_message(message, "<b>📍 Select Watermark Position:</b>", buttons.build_menu(3))
+            title = "🖼️ Image" if "img" in data[2] else ("📝 Text" if "text" in data[2] else "")
+            await edit_message(message, f"<b>📍 Select {title} Watermark Position:</b>", buttons.build_menu(3))
     elif data[2] == "uphoster_destinations":
         await query.answer()
         user_dict = user_data.get(user_id, {})
@@ -2475,8 +2562,8 @@ async def edit_user_settings(client, query):
             query,
             pfunc,
             rfunc,
-            photo=data[3] == "THUMBNAIL",
-            document=data[3] != "THUMBNAIL",
+            photo=data[3] in ["THUMBNAIL", "THUMB_WM_IMAGE", "WM_IMAGE"],
+            document=data[3] not in ["THUMBNAIL", "THUMB_WM_IMAGE", "WM_IMAGE"],
         )
     elif data[2] in ["set", "addone", "rmone"]:
         await query.answer()
@@ -2508,6 +2595,8 @@ async def edit_user_settings(client, query):
             "RCLONE_CONFIG",
             "TOKEN_PICKLE",
             "USER_COOKIE_FILE",
+            "THUMB_WM_IMAGE",
+            "WM_IMAGE",
         ]:
             if data[3] == "THUMBNAIL":
                 fpath = thumb_path
@@ -2515,8 +2604,12 @@ async def edit_user_settings(client, query):
                 fpath = rclone_conf
             elif data[3] == "USER_COOKIE_FILE":
                 fpath = yt_cookie_path
-            else:
+            elif data[3] == "TOKEN_PICKLE":
                 fpath = token_pickle
+            elif data[3] == "THUMB_WM_IMAGE":
+                fpath = f"watermark/{user_id}_thumb_wm.jpg"
+            else:
+                fpath = f"watermark/{user_id}_wm.jpg"
             if await aiopath.exists(fpath):
                 await remove(fpath)
             del user_dict[data[3]]
