@@ -155,6 +155,13 @@ try:
 except Exception as e:
     LOGGER.error(f"restart_notification error: {e}")
 
+from .helper.ext_utils.range_utils import resume_range_tasks_on_startup
+
+try:
+    bot_loop.run_until_complete(resume_range_tasks_on_startup())
+except Exception as e:
+    LOGGER.error(f"resume_range_tasks error: {e}")
+
 from .helper.ext_utils.tunnel_monitor import start_tunnel_monitor
 
 start_tunnel_monitor()

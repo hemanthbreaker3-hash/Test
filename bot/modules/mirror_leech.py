@@ -685,31 +685,101 @@ class Mirror(TaskListener):
                 )
             await add_aria2_download(self, path, headers, ratio, seed_time)
 
-    async def _process_range_each_sequentially(self, range_links):
+    async def resume_range_task(self, range_data):
+        range_id = range_data["range_id"]
+        start_idx = range_data.get("current_idx", 1)
+        range_links = range_data.get("links", [])
+        await self._process_range_each_sequentially(range_links, start_idx=start_idx, range_id=range_id)
+
+    async def _process_range_each_sequentially(self, range_links, start_idx=1, range_id=None):
         from bot import active_range_tasks
+        from ..helper.ext_utils.range_utils import save_range_tasks_to_file
+
         total_items = len(range_links)
-        range_id = f"rl_{self.mid}"
+        if not range_id:
+            range_id = f"rl_{self.mid}"
+
+        listener_dict = {
+            "mid": self.mid,
+            "user_id": self.user_id,
+            "tag": self.tag,
+            "is_qbit": self.is_qbit,
+            "is_leech": self.is_leech,
+            "is_jd": self.is_jd,
+            "is_nzb": self.is_nzb,
+            "is_seedr": self.is_seedr,
+            "is_uphoster": self.is_uphoster,
+            "options": getattr(self, "options", {}),
+            "as_doc": self.as_doc,
+            "as_med": self.as_med,
+            "compress": self.compress,
+            "extract": self.extract,
+            "name": self.name,
+            "folder_name": self.folder_name,
+            "manual_merge": self.manual_merge,
+            "auto_merge": self.auto_merge,
+            "merge_custom_name": getattr(self, "merge_custom_name", ""),
+            "merge_mode": getattr(self, "merge_mode", "normal"),
+            "up_dest": self.up_dest,
+            "dump_dest": self.dump_dest,
+            "category": self.category,
+            "rc_flags": self.rc_flags,
+            "thumb": self.thumb,
+            "split_size": self.split_size,
+            "sample_video": self.sample_video,
+            "screen_shots": self.screen_shots,
+            "convert_audio": self.convert_audio,
+            "convert_video": self.convert_video,
+            "name_swap": self.name_swap,
+            "hybrid_leech": self.hybrid_leech,
+            "thumbnail_layout": self.thumbnail_layout,
+            "ffmpeg_cmds": self.ffmpeg_cmds,
+            "ht_flag": self.ht_flag,
+            "manual_rm_stream": getattr(self, "manual_rm_stream", False),
+            "manual_reorder": getattr(self, "manual_reorder", False),
+            "reorder_aud": getattr(self, "reorder_aud", []),
+            "reorder_sub": getattr(self, "reorder_sub", []),
+            "aud_select": getattr(self, "aud_select", None),
+            "sub_select": getattr(self, "sub_select", None),
+            "aud_order": getattr(self, "aud_order", None),
+            "sub_order": getattr(self, "sub_order", None),
+            "manual_trim": getattr(self, "manual_trim", False),
+            "trim_range": getattr(self, "trim_range", ""),
+            "manual_extract": getattr(self, "manual_extract", False),
+            "extract_types": getattr(self, "extract_types", []),
+            "metadata_dict": getattr(self, "metadata_dict", {}),
+            "audio_metadata_dict": getattr(self, "audio_metadata_dict", {}),
+            "video_metadata_dict": getattr(self, "video_metadata_dict", {}),
+            "subtitle_metadata_dict": getattr(self, "subtitle_metadata_dict", {}),
+            "chat_id": self.message.chat.id if self.message and getattr(self.message, "chat", None) else None,
+            "message_id": getattr(self.message, "id", None),
+        }
+
         range_info = {
             "range_id": range_id,
             "mid": self.mid,
             "user_id": self.user_id,
             "tag": self.tag,
             "total_links": total_items,
-            "current_idx": 1,
+            "current_idx": start_idx,
             "current_sub_task": None,
             "is_cancelled": False,
             "links": range_links,
+            "listener_dict": listener_dict,
         }
         active_range_tasks[range_id] = range_info
-        LOGGER.info(f"Processing range link in 'each' mode: {total_items} items continuously.")
+        await save_range_tasks_to_file()
+        LOGGER.info(f"Processing range link in 'each' mode: {total_items} items continuously (starting at index {start_idx}).")
 
         try:
-            for idx, item_url in enumerate(range_links, start=1):
+            for idx in range(start_idx, total_items + 1):
+                item_url = range_links[idx - 1]
                 if range_info.get("is_cancelled") or self.is_cancelled:
                     LOGGER.info("Sequential range link processing cancelled by user.")
                     break
 
                 range_info["current_idx"] = idx
+                await save_range_tasks_to_file()
 
                 try:
                     sub_msg, sub_session = await get_tg_link_message(item_url, range_mode="normal")
@@ -790,6 +860,7 @@ class Mirror(TaskListener):
                 await sleep(1)
         finally:
             active_range_tasks.pop(range_id, None)
+            await save_range_tasks_to_file()
 
     async def _run_single_range_item(self, reply_to, item_url, session):
         path = f"{DOWNLOAD_DIR}{self.mid}{self.folder_name}"
