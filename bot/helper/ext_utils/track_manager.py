@@ -6,6 +6,7 @@ from contextlib import suppress
 from os import path as ospath, walk
 
 from aiofiles.os import remove, path as aiopath
+from aioshutil import move
 from pyrogram.enums import ButtonStyle
 from pyrogram.types import CallbackQuery
 
@@ -554,8 +555,7 @@ async def proceed_track_manager(listener, dl_path, gid):
 
         res_code, err, code = await cmd_exec(cmd)
         if code == 0 and await aiopath.exists(out_path):
-            await remove(fp)
-            await sync_to_async(ospath.rename, out_path, fp)
+            await move(out_path, fp)
             LOGGER.info(f"Track Manager successfully updated tracks for {fp}")
         else:
             LOGGER.error(f"Track Manager FFmpeg error for {fp}: {err}")
