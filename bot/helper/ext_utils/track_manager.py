@@ -7,7 +7,6 @@ from os import path as ospath, walk
 
 from aiofiles.os import remove, path as aiopath
 from aioshutil import move
-from pyrogram.enums import ButtonStyle
 from pyrogram.types import CallbackQuery
 
 from ... import LOGGER, bot_loop, DOWNLOAD_DIR
@@ -134,9 +133,9 @@ def format_tm_ui(session):
         buttons.data_button("🔄 Apply to All", f"tmcb apply_all {mid}", position="default")
 
         # Last row in footer (f_cols=3): Cancel (left), Select File (middle), Done (right)
-        buttons.data_button("❌ Cancel", f"tmcb cancel {mid}", position="footer", style=ButtonStyle.DANGER)
-        buttons.data_button("📁 Select File", f"tmcb select_file {mid}", position="footer", style=ButtonStyle.PRIMARY)
-        buttons.data_button("✅ Done", f"tmcb done {mid}", position="footer", style=ButtonStyle.SUCCESS)
+        buttons.data_button("❌ Cancel", f"tmcb cancel {mid}", position="footer")
+        buttons.data_button("📁 Select File", f"tmcb select_file {mid}", position="footer")
+        buttons.data_button("✅ Done", f"tmcb done {mid}", position="footer")
 
         return caption, buttons.build_menu(b_cols=1, h_cols=3, f_cols=3)
 
@@ -157,7 +156,7 @@ def format_tm_ui(session):
             buttons.data_button(f"Page {page}/{total_pages}", "tmcb dummy", position="header")
             buttons.data_button("Next ▶️", f"tmcb page {mid} {next_p}", position="header")
 
-        buttons.data_button("◀️ Back", f"tmcb back {mid}", position="footer", style=ButtonStyle.SECONDARY)
+        buttons.data_button("◀️ Back", f"tmcb back {mid}", position="footer")
         return caption, buttons.build_menu(b_cols=1, h_cols=3, f_cols=1)
 
     elif view_mode in ("audio", "sub"):
@@ -215,7 +214,7 @@ def format_tm_ui(session):
             buttons.data_button("🔄 Apply to All", f"tmcb apply_all {mid}", position="footer")
             buttons.data_button("◀️ Back", f"tmcb back {mid}", position="footer")
 
-        buttons.data_button("✅ Done", f"tmcb done {mid}", position="footer", style=ButtonStyle.SUCCESS)
+        buttons.data_button("✅ Done", f"tmcb done {mid}", position="footer")
 
         footer_cols = 3 if is_multi else 2
         return caption, buttons.build_menu(b_cols=1, fb_cols=2, f_cols=footer_cols)

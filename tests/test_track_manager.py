@@ -100,6 +100,30 @@ class TestTrackManager(unittest.TestCase):
         self.assertIn("v1.mkv", caption)
         self.assertIn("v2.mkv", caption)
 
+    def test_format_tm_ui_select_file(self):
+        session = {
+            "mid": 12345,
+            "is_multi": True,
+            "view_mode": "select_file",
+            "page": 1,
+            "page_size": 2,
+            "current_file_idx": 0,
+            "files": [
+                {
+                    "path": "/tmp/v1.mkv",
+                    "name": "v1.mkv",
+                    "audio_tracks": [{"index": 1, "short_lang": "Eng"}],
+                    "sub_tracks": [],
+                    "audio_order": [0],
+                    "sub_order": [],
+                    "selected_audio": {0},
+                    "selected_sub": set(),
+                },
+            ],
+        }
+        caption, markup = format_tm_ui(session)
+        self.assertIn("Select a File to Edit Tracks", caption)
+
 
 if __name__ == "__main__":
     unittest.main()
