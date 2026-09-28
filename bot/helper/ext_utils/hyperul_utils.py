@@ -121,6 +121,9 @@ class HypertgUpload(HypertgTransfer):
         elif thumb_mode == "none":
             thumb = None
 
+        if thumb and thumb != "none" and await aiopath.exists(str(thumb)):
+            thumb = await apply_thumbnail_watermark(thumb, self._listener.user_dict)
+
         if (
             force_document
             or self._listener.as_doc
@@ -152,7 +155,6 @@ class HypertgUpload(HypertgTransfer):
             key = "photos"
 
         if thumb and thumb != "none" and await aiopath.exists(str(thumb)):
-            thumb = await apply_thumbnail_watermark(thumb, self._listener.user_dict)
             formatted_t = await sync_to_async(format_tg_thumbnail, thumb)
             if formatted_t and await aiopath.exists(str(formatted_t)):
                 thumb = formatted_t

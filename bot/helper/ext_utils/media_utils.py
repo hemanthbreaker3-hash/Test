@@ -22,7 +22,7 @@ from niquests import AsyncSession
 
 from ... import LOGGER, DOWNLOAD_DIR
 from ...core.cpu import ffmpeg_layout
-from ...core.config_manager import BinConfig
+from ...core.config_manager import Config, BinConfig
 from .bot_utils import cmd_exec, sync_to_async
 from .files_utils import get_mime_type, is_archive, is_archive_split
 from .status_utils import time_to_seconds
@@ -1106,7 +1106,7 @@ class FFMpeg:
             await remove(output)
         return False
 
-    async def apply_watermark(self, video_file, text="", image_path="", position="Top-Left", color="white", size=""):
+    async def apply_watermark(self, video_file, text="", image_path="", position="Top-Left", color="white", size="", image_position="", text_position=""):
         cores, threads = ffmpeg_layout()
         self.clear()
         self._total_time = (await get_media_info(video_file))[0]
@@ -1137,8 +1137,11 @@ class FFMpeg:
             "Bottom-Right": "main_w-overlay_w-10:main_h-overlay_h-10",
         }
 
+        img_pos = image_position or position
+        txt_pos = text_position or position
+
         if image_path and await aiopath.exists(image_path):
-            overlay_pos = pos_map_img.get(position, "10:10")
+            overlay_pos = pos_map_img.get(img_pos, "10:10")
             if size and str(size).strip().isdigit():
                 scale_w = int(str(size).strip())
                 filter_str = f"[1:v]scale={scale_w}:-1[wm];[0:v][wm]overlay={overlay_pos}[outv]"
@@ -1158,7 +1161,7 @@ class FFMpeg:
             ]
         elif text:
             escaped_text = text.replace(":", r"\:").replace("'", r"'\''")
-            text_pos = pos_map_text.get(position, "x=10:y=10")
+            text_pos = pos_map_text.get(txt_pos, "x=10:y=10")
             font_color = color or "white"
             font_size = str(size).strip() if size and str(size).strip().isdigit() else "24"
             vf = f"drawtext=text='{escaped_text}':fontcolor={font_color}:fontsize={font_size}:{text_pos}"
@@ -1410,15 +1413,79 @@ class FFMpeg:
         return f_path
 
 
+def _calc_wm_position(pos_str: str, bg_w: int, bg_h: int, wm_w: int, wm_h: int, margin: int = 15) -> tuple:
+    pos = str(pos_str).strip().lower()
+
+    if pos == "center":
+        x = (bg_w - wm_w) // 2
+        y = (bg_h - wm_h) // 2
+        return max(0, x), max(0, y)
+
+    if "center" in pos and "left" not in pos and "right" not in pos:
+        x = (bg_w - wm_w) // 2
+    elif "right" in pos:
+        x = bg_w - wm_w - margin
+    else:
+        x = margin
+
+    if "center" in pos and "top" not in pos and "bottom" not in pos:
+        y = (bg_h - wm_h) // 2
+    elif "bottom" in pos:
+        y = bg_h - wm_h - margin
+    else:
+        y = margin
+
+    return max(0, x), max(0, y)
+
+
 async def apply_thumbnail_watermark(thumb_path: str, user_dict: dict) -> str:
     import os
     if not thumb_path or not await aiopath.exists(str(thumb_path)):
         return thumb_path
 
-    wm_text = user_dict.get("THUMB_WM_TEXT") or user_dict.get("WM_TEXT") or ""
-    wm_img = user_dict.get("THUMB_WM_IMAGE") or user_dict.get("WM_IMAGE") or ""
-    wm_size = user_dict.get("THUMB_WM_SIZE") or user_dict.get("WM_SIZE") or "30"
-    wm_pos = user_dict.get("THUMB_WM_POSITION") or user_dict.get("WM_POSITION") or "Top-Left"
+    if str(thumb_path).endswith("_wm.jpg"):
+        return thumb_path
+
+    wm_text = (
+        user_dict.get("THUMB_WM_TEXT")
+        or user_dict.get("WM_TEXT")
+        or getattr(Config, "WM_TEXT", "")
+        or ""
+    )
+    wm_img = (
+        user_dict.get("THUMB_WM_IMAGE")
+        or user_dict.get("WM_IMAGE")
+        or getattr(Config, "WM_IMAGE", "")
+        or ""
+    )
+    wm_size = (
+        user_dict.get("THUMB_WM_SIZE")
+        or user_dict.get("WM_SIZE")
+        or getattr(Config, "WM_SIZE", "30")
+        or "30"
+    )
+    wm_img_pos = (
+        user_dict.get("THUMB_WM_IMAGE_POSITION")
+        or user_dict.get("THUMB_WM_POSITION")
+        or user_dict.get("WM_IMAGE_POSITION")
+        or user_dict.get("WM_POSITION")
+        or getattr(Config, "WM_POSITION", "Top-Left")
+        or "Top-Left"
+    )
+    wm_text_pos = (
+        user_dict.get("THUMB_WM_TEXT_POSITION")
+        or user_dict.get("THUMB_WM_POSITION")
+        or user_dict.get("WM_TEXT_POSITION")
+        or user_dict.get("WM_POSITION")
+        or getattr(Config, "WM_POSITION", "Top-Left")
+        or "Top-Left"
+    )
+    wm_color = (
+        user_dict.get("THUMB_WM_COLOR")
+        or user_dict.get("WM_COLOR")
+        or getattr(Config, "WM_COLOR", "white")
+        or "white"
+    )
 
     if not wm_text and not wm_img:
         return thumb_path
@@ -1445,16 +1512,7 @@ async def apply_thumbnail_watermark(thumb_path: str, user_dict: dict) -> str:
                             Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS,
                         )
 
-                        x, y = 10, 10
-                        if "Center" in wm_pos:
-                            x = (w - wm_w) // 2
-                        elif "Right" in wm_pos:
-                            x = w - wm_w - 10
-                        if "Center" in wm_pos and "Top" not in wm_pos and "Bottom" not in wm_pos:
-                            y = (h - wm_h) // 2
-                        elif "Bottom" in wm_pos:
-                            y = h - wm_h - 10
-
+                        x, y = _calc_wm_position(wm_img_pos, w, h, wm_w, wm_h, margin=15)
                         base_img.paste(watermark, (x, y), watermark)
 
                 elif wm_text:
@@ -1473,20 +1531,12 @@ async def apply_thumbnail_watermark(thumb_path: str, user_dict: dict) -> str:
                     text_w = bbox[2] - bbox[0]
                     text_h = bbox[3] - bbox[1]
 
-                    x, y = 15, 15
-                    pos_lower = wm_pos.lower()
-                    if "center" in pos_lower and "top" not in pos_lower and "bottom" not in pos_lower and "left" not in pos_lower and "right" not in pos_lower:
-                        x = (w - text_w) // 2
-                        y = (h - text_h) // 2
-                    else:
-                        if "center" in pos_lower:
-                            x = (w - text_w) // 2
-                        elif "right" in pos_lower:
-                            x = w - text_w - 15
-                        if "bottom" in pos_lower:
-                            y = h - text_h - 15
-
-                    draw.text((x, y), wm_text, fill=(255, 255, 255, 230), font=font)
+                    x, y = _calc_wm_position(wm_text_pos, w, h, text_w, text_h, margin=15)
+                    font_fill = wm_color or "white"
+                    try:
+                        draw.text((x, y), wm_text, fill=font_fill, font=font)
+                    except Exception:
+                        draw.text((x, y), wm_text, fill=(255, 255, 255, 230), font=font)
 
                 out_path = f"{thumb_path}_wm.jpg"
                 base_img.convert("RGB").save(out_path, "JPEG", quality=90)
