@@ -1405,10 +1405,10 @@ Configure custom video encoding, compression, and watermark overlays for uploads
             position="header",
         )
         buttons.data_button(
-            "FFmpeg Cmds", f"userset {user_id} menu FFMPEG_CMDS", "header"
+            "FFmpeg Cmds", f"userset {user_id} menu FFMPEG_CMDS"
         )
         buttons.data_button(
-            "DUMP", f"userset {user_id} menu FFMPEG_DUMP", "header"
+            "DUMP", f"userset {user_id} menu FFMPEG_DUMP"
         )
 
         user_ff = user_dict.get("FFMPEG_CMDS") or {}
@@ -1432,7 +1432,6 @@ Configure custom video encoding, compression, and watermark overlays for uploads
 
         set_all_enabled = user_dict.get("SET_ALL_METADATA_ENABLE", False)
 
-        buttons.data_button("Set All Metadata", f"userset {user_id} menu SET_ALL_METADATA")
         buttons.data_button(
             f"Set All Metadata: {'ON' if set_all_enabled else 'OFF'}",
             f"userset {user_id} tog SET_ALL_METADATA_ENABLE {'f' if set_all_enabled else 't'}",
@@ -1452,7 +1451,10 @@ Configure custom video encoding, compression, and watermark overlays for uploads
             )
             display_set_all_meta = f"<code>{display_set_all_meta}</code>"
 
-        if not set_all_enabled:
+        if set_all_enabled:
+            buttons.data_button("Set All Metadata", f"userset {user_id} menu SET_ALL_METADATA")
+            buttons.data_button("Metadata", f"userset {user_id} menu METADATA")
+        else:
             buttons.data_button("Metadata", f"userset {user_id} menu METADATA")
             buttons.data_button("Audio Metadata", f"userset {user_id} menu AUDIO_METADATA")
             buttons.data_button("Video Metadata", f"userset {user_id} menu VIDEO_METADATA")
@@ -1500,7 +1502,7 @@ Configure custom video encoding, compression, and watermark overlays for uploads
         buttons.data_button(
             "❌ Close", f"userset {user_id} close", "footer", style=ButtonStyle.DANGER
         )
-        btns = buttons.build_menu(2)
+        btns = buttons.build_menu(2, h_cols=1)
 
         set_all_status = "Enabled" if set_all_enabled else "Disabled"
         strip_meta_status = "Enabled" if strip_meta_enabled else "Disabled"
