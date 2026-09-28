@@ -162,6 +162,10 @@ class Mirror(TaskListener):
             "-yt": False,
             "-seedr": False,
             "-ht": False,
+            "-trackmanager": False,
+            "-tr": False,
+            "-track": False,
+            "-tm": False,
             "-i": 0,
             "-sp": 0,
             "link": "",
@@ -255,6 +259,16 @@ class Mirror(TaskListener):
 
 
         self.ht_flag = bool(args["-ht"] or "-ht" in self.options)
+        self.track_manager = bool(
+            args["-trackmanager"]
+            or args["-tr"]
+            or args["-track"]
+            or args["-tm"]
+            or any(
+                f in self.options
+                for f in ("-trackmanager", "-tr", "-track", "-tm")
+            )
+        )
 
         from ..helper.ext_utils.task_manager import get_task_key
         task_source = self.link or (self.message.reply_to_message.text if self.message.reply_to_message and self.message.reply_to_message.text else "") or self.name
@@ -735,6 +749,7 @@ class Mirror(TaskListener):
             "thumbnail_layout": self.thumbnail_layout,
             "ffmpeg_cmds": self.ffmpeg_cmds,
             "ht_flag": self.ht_flag,
+            "track_manager": getattr(self, "track_manager", False),
             "manual_rm_stream": getattr(self, "manual_rm_stream", False),
             "manual_reorder": getattr(self, "manual_reorder", False),
             "reorder_aud": getattr(self, "reorder_aud", []),
@@ -825,6 +840,7 @@ class Mirror(TaskListener):
                     sub_task.thumbnail_layout = self.thumbnail_layout
                     sub_task.ffmpeg_cmds = self.ffmpeg_cmds
                     sub_task.ht_flag = self.ht_flag
+                    sub_task.track_manager = getattr(self, "track_manager", False)
                     sub_task.manual_rm_stream = getattr(self, "manual_rm_stream", False)
                     sub_task.manual_reorder = getattr(self, "manual_reorder", False)
                     sub_task.reorder_aud = getattr(self, "reorder_aud", [])
