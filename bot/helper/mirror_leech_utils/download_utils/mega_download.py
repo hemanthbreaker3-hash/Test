@@ -32,6 +32,11 @@ from ...listeners.mega_listener import (
     AsyncMega,
     MegaAppListener,
     MegaFolderListener,
+    _call_attr,
+    _get_node_handle,
+    _get_node_name,
+    _get_node_size,
+    _is_node_folder,
     _mega_error_format,
     _MEGA_SDK_LOCK,
 )
@@ -39,77 +44,49 @@ from ...mirror_leech_utils.status_utils.mega_status import MegaDownloadStatus
 from ...mirror_leech_utils.status_utils.queue_status import QueueStatus
 
 
+_MEGA_PY_PATCHED = False
+
+def _patch_mega_py():
+    global _MEGA_PY_PATCHED
+    if _MEGA_PY_PATCHED:
+        return
+    _MEGA_PY_PATCHED = True
+    try:
+        from mega.errors import RequestError
+        if not getattr(RequestError, "_is_patched", False):
+            _orig_init = RequestError.__init__
+            def _patched_init(self, message):
+                if isinstance(message, int):
+                    _orig_init(self, message)
+                else:
+                    self.code = -1
+                    self.message = str(message)
+            RequestError.__init__ = _patched_init
+            RequestError._is_patched = True
+    except Exception:
+        pass
+
+    try:
+        import re
+        from mega import Mega
+        if not getattr(Mega, "_is_patched", False):
+            _orig_parse_url = Mega.parse_url
+            def _patched_parse_url(self, url):
+                m = re.search(r"mega\.(?:co\.)?nz/(file|folder)/([^#]+)#(.+)", url)
+                if m:
+                    prefix = "#F!" if m.group(1) == "folder" else "#!"
+                    url = f"https://mega.nz/{prefix}{m.group(2)}!{m.group(3)}"
+                return _orig_parse_url(self, url)
+            Mega.parse_url = _patched_parse_url
+            Mega._is_patched = True
+    except Exception:
+        pass
+
+
 def _mega_py_download_sync(listener, path, email, password, status_helper=None):
-    import re
-    from time import time
-    from pathlib import Path
-    import tempfile
-    import shutil
+    _patch_mega_py()
     from mega import Mega
-    from mega.crypto import (
-        a32_to_str,
-        base64_to_a32,
-        base64_url_decode,
-        decrypt_attr,
-        decrypt_key,
-        str_to_a32,
-    )
-
     mega = Mega()
-    _orig_download_file = mega._download_file
-
-    def _fixed_download_file(
-        self,
-        file_handle,
-        file_key,
-        file_data,
-        dest_path,
-        client_url,
-        file_name,
-        file_size,
-    ):
-        import requests
-        input_file_key = file_key
-        meta_mac = input_file_key[0] ^ input_file_key[1], input_file_key[2] ^ input_file_key[3]
-        k = input_file_key[0] ^ input_file_key[4], input_file_key[1] ^ input_file_key[5], input_file_key[2] ^ input_file_key[6], input_file_key[3] ^ input_file_key[7]
-        iv = input_file_key[4], input_file_key[5], 0, 0
-
-        temp_output_file = tempfile.NamedTemporaryFile(mode="wb", delete=False)
-        with requests.get(client_url, stream=True) as r:
-            r.raise_for_status()
-            chunk_size = 1024 * 1024
-            mac_str = "\x00" * 16
-            start_time = time()
-
-            for chunk in r.iter_content(chunk_size=chunk_size):
-                if listener.is_cancelled:
-                    temp_output_file.close()
-                    os.unlink(temp_output_file.name)
-                    return None
-                if chunk:
-                    chunk = str_to_a32(chunk)
-                    chunk, mac_str = self._aes_cbc_decrypt_a32(chunk, k, iv, mac_str)
-                    temp_output_file.write(a32_to_str(chunk))
-                    if status_helper is not None:
-                        file_info = os.stat(temp_output_file.name)
-                        status_helper.downloaded_bytes = file_info.st_size
-                        elapsed = time() - start_time
-                        if elapsed > 0:
-                            status_helper.speed = int(file_info.st_size / elapsed)
-                        if listener.size <= 0 and file_size > 0:
-                            listener.size = file_size
-            file_mac = str_to_a32(mac_str)
-            if len(file_mac) < 4:
-                file_mac = tuple(file_mac) + (0,) * (4 - len(file_mac))
-            if (file_mac[0] ^ file_mac[1], file_mac[2] ^ file_mac[3]) != meta_mac:
-                LOGGER.debug("Mega MAC integrity check mismatch, proceeding with download.")
-            output_path = Path(dest_path + file_name)
-            shutil.move(temp_output_file.name, output_path)
-            return output_path
-
-    Mega._orig_download_file = _orig_download_file
-    Mega._download_file = _fixed_download_file
-
     m = None
     if email and password:
         try:
@@ -267,11 +244,17 @@ def _find_child_in_list(children, target_handle):
         target_int = _to_handle(target_handle) if callable(_to_handle) else None
     except Exception:
         target_int = None
-    for i in range(children.size()):
-        child = children.get(i)
+    sz = _call_attr(children, "size", 0)
+    for i in range(sz):
+        child = _call_attr(children, "get", None, i)
         try:
-            ch = child.getHandle()
-            if ch == target_handle or (target_int is not None and ch == target_int):
+            ch = _get_node_handle(child)
+            ch_name = _get_node_name(child)
+            if (
+                ch == target_handle
+                or (target_int is not None and ch == target_int)
+                or ch_name == target_handle
+            ):
                 return child
         except Exception:
             pass
@@ -425,13 +408,9 @@ async def add_mega_download(listener, path):
                 dl_listener._cache_node_data(node)
                 LOGGER.info("Mega: subfolder name=%s", dl_listener._name)
 
-                dl_listener._size = listener.size
-                if not dl_listener._size:
-                    try:
-                        s = node.getSize()
-                        dl_listener._size = s if s < (1 << 62) else -1
-                    except Exception:
-                        pass
+                dl_listener._size = listener.size or _get_node_size(node, folder_api)
+                if not dl_listener._size or dl_listener._size >= (1 << 62):
+                    dl_listener._size = -1
                 LOGGER.info("Mega: subfolder size=%s", dl_listener._size)
             else:
                 node = dl_listener.node
@@ -457,8 +436,13 @@ async def add_mega_download(listener, path):
             await async_api.getPublicNode(listener.link)
             if listener.is_cancelled or mega_listener.is_cancelled:
                 return
+            if mega_listener.error:
+                LOGGER.error("Mega getPublicNode error for link %s: %s", listener.link, mega_listener.error)
+                await listener.on_download_error(_mega_error_format(mega_listener.error))
+                return
             node = mega_listener.public_node
             if not node:
+                LOGGER.error("Mega: Failed to resolve public node for link: %s", listener.link)
                 await listener.on_download_error("Failed to resolve MEGA link")
                 return
 
@@ -467,11 +451,8 @@ async def add_mega_download(listener, path):
         )
         listener.size = dl_listener._size if dl_listener._size < (1 << 62) else -1
         if listener.size <= 0 and node:
-            try:
-                s = node.getSize()
-                listener.size = s if s < (1 << 62) else -1
-            except Exception:
-                pass
+            s = _get_node_size(node)
+            listener.size = s if s < (1 << 62) else -1
         gid = token_hex(5)
         msg, button = await stop_duplicate_check(listener)
         if msg:
@@ -535,8 +516,24 @@ async def add_mega_download(listener, path):
             await async_api.wait_for_transfer()
 
             if listener.is_cancelled or dl_listener.is_cancelled:
+                LOGGER.info("MegaDownload: transfer cancelled during attempt %s", attempt + 1)
                 return
+
+            if dl_listener.error and not dl_listener.retryable_error:
+                LOGGER.error(
+                    "MegaDownload: fatal error during download: %s",
+                    dl_listener.error,
+                )
+                await listener.on_download_error(
+                    _mega_error_format(dl_listener.error)
+                )
+                return
+
             if not dl_listener.retryable_error:
+                LOGGER.info(
+                    "MegaDownload: completed transfer successfully for %s",
+                    listener.name,
+                )
                 return
 
             if dl_listener.retryable_error.startswith("-13"):

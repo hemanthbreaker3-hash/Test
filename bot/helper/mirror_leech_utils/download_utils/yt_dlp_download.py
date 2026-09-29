@@ -166,7 +166,11 @@ class YoutubeDLHelper:
         async_to_sync(self._listener.on_download_error, error)
 
     def _extract_meta_data(self):
-        with YoutubeDL(self.opts) as ydl:
+        opts = self.opts.copy()
+        if self.is_playlist:
+            opts["extract_flat"] = "in_playlist"
+            opts["ignoreerrors"] = True
+        with YoutubeDL(opts) as ydl:
             try:
                 result = ydl.extract_info(self._listener.link, download=False)
                 if result is None:
