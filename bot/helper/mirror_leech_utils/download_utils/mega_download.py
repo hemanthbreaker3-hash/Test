@@ -4,7 +4,13 @@ from contextlib import suppress
 from secrets import token_hex
 
 from aiofiles.os import makedirs
-from mega import MegaApi, MegaCancelToken
+try:
+    from mega import MegaApi, MegaCancelToken
+except (ImportError, SyntaxError, Exception):
+    try:
+        from megasdk import MegaApi, MegaCancelToken
+    except (ImportError, SyntaxError, Exception):
+        MegaApi = MegaCancelToken = None
 
 from .... import LOGGER, task_dict, task_dict_lock, user_data
 from ....core.config_manager import Config
@@ -108,6 +114,10 @@ async def add_mega_download(listener, path):
         await listener.on_download_error(
             "Mega Link downloads are currently disabled by the Bot Owner."
         )
+        return
+
+    if MegaApi is None:
+        await listener.on_download_error("MegaSDK not installed or failed to load.")
         return
 
     user_dict = user_data.get(listener.user_id, {})
