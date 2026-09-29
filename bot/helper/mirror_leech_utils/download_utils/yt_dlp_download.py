@@ -20,12 +20,23 @@ from ..status_utils.yt_dlp_status import YtDlpStatus
 LOGGER = getLogger(__name__)
 
 
-def get_cookie_file(user_dict):
-    if not user_dict.get("USE_DEFAULT_COOKIE", False):
+def get_cookie_file(user_dict, user_id=None):
+    use_default = user_dict.get("USE_DEFAULT_COOKIE", False)
+    if use_default:
+        if ospath.exists("cookies.txt"):
+            return "cookies.txt", None
+        if ospath.exists("cookies/cookies.txt"):
+            return "cookies/cookies.txt", None
+        return None, "Owner cookie file not found / configured!"
+    else:
         usr_cookie = user_dict.get("USER_COOKIE_FILE", "")
         if usr_cookie and ospath.exists(usr_cookie):
-            return usr_cookie
-    return "cookies.txt"
+            return usr_cookie, None
+        if user_id:
+            uid_cookie = f"cookies/{user_id}/cookies.txt"
+            if ospath.exists(uid_cookie):
+                return uid_cookie, None
+        return None, "User cookie file not found / configured!"
 
 
 class MyLogger:
@@ -88,11 +99,14 @@ class YoutubeDLHelper:
                 "extractor": lambda n: 3,
             },
         }
-        cookie_to_use = get_cookie_file(self._listener.user_dict)
-        self.opts["cookiefile"] = cookie_to_use
-        LOGGER.info(
-            f"Using cookies.txt file: {cookie_to_use} | User ID : {self._listener.user_id}"
-        )
+        cookie_to_use, err = get_cookie_file(self._listener.user_dict, self._listener.user_id)
+        if cookie_to_use and ospath.exists(cookie_to_use):
+            self.opts["cookiefile"] = cookie_to_use
+            LOGGER.info(
+                f"Using cookies.txt file: {cookie_to_use} | User ID : {self._listener.user_id}"
+            )
+        else:
+            self.opts.pop("cookiefile", None)
 
     @property
     def download_speed(self):
@@ -212,6 +226,11 @@ class YoutubeDLHelper:
         return
 
     async def add_download(self, path, qual, playlist, options):
+        cookie_to_use, err = get_cookie_file(self._listener.user_dict, self._listener.user_id)
+        if err and not cookie_to_use:
+            await self._listener.on_download_error(err)
+            return
+
         if playlist:
             self.opts["ignoreerrors"] = True
             self.is_playlist = True

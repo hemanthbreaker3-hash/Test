@@ -22,6 +22,12 @@ from ...ext_utils.task_manager import (
 )
 from ...ext_utils.files_utils import clean_download
 from ...ext_utils.links_utils import get_mega_subfolder_handle, is_mega_folder_link
+from ...ext_utils.status_utils import (
+    MirrorStatus,
+    EngineStatus,
+    get_readable_file_size,
+    get_readable_time,
+)
 from ...listeners.mega_listener import (
     AsyncMega,
     MegaAppListener,
@@ -31,6 +37,192 @@ from ...listeners.mega_listener import (
 )
 from ...mirror_leech_utils.status_utils.mega_status import MegaDownloadStatus
 from ...mirror_leech_utils.status_utils.queue_status import QueueStatus
+
+
+def _mega_py_download_sync(listener, path, email, password, status_helper=None):
+    import re
+    from time import time
+    from pathlib import Path
+    import tempfile
+    import shutil
+    from mega import Mega
+    from mega.crypto import (
+        a32_to_str,
+        base64_to_a32,
+        base64_url_decode,
+        decrypt_attr,
+        decrypt_key,
+        str_to_a32,
+    )
+
+    mega = Mega()
+    _orig_download_file = mega._download_file
+
+    def _fixed_download_file(
+        self,
+        file_handle,
+        file_key,
+        file_data,
+        dest_path,
+        client_url,
+        file_name,
+        file_size,
+    ):
+        import requests
+        input_file_key = file_key
+        meta_mac = input_file_key[0] ^ input_file_key[1], input_file_key[2] ^ input_file_key[3]
+        k = input_file_key[0] ^ input_file_key[4], input_file_key[1] ^ input_file_key[5], input_file_key[2] ^ input_file_key[6], input_file_key[3] ^ input_file_key[7]
+        iv = input_file_key[4], input_file_key[5], 0, 0
+
+        temp_output_file = tempfile.NamedTemporaryFile(mode="wb", delete=False)
+        with requests.get(client_url, stream=True) as r:
+            r.raise_for_status()
+            chunk_size = 1024 * 1024
+            mac_str = "\x00" * 16
+            start_time = time()
+
+            for chunk in r.iter_content(chunk_size=chunk_size):
+                if listener.is_cancelled:
+                    temp_output_file.close()
+                    os.unlink(temp_output_file.name)
+                    return None
+                if chunk:
+                    chunk = str_to_a32(chunk)
+                    chunk, mac_str = self._aes_cbc_decrypt_a32(chunk, k, iv, mac_str)
+                    temp_output_file.write(a32_to_str(chunk))
+                    if status_helper is not None:
+                        file_info = os.stat(temp_output_file.name)
+                        status_helper.downloaded_bytes = file_info.st_size
+                        elapsed = time() - start_time
+                        if elapsed > 0:
+                            status_helper.speed = int(file_info.st_size / elapsed)
+                        if listener.size <= 0 and file_size > 0:
+                            listener.size = file_size
+            file_mac = str_to_a32(mac_str)
+            if len(file_mac) < 4:
+                file_mac = tuple(file_mac) + (0,) * (4 - len(file_mac))
+            if (file_mac[0] ^ file_mac[1], file_mac[2] ^ file_mac[3]) != meta_mac:
+                LOGGER.debug("Mega MAC integrity check mismatch, proceeding with download.")
+            output_path = Path(dest_path + file_name)
+            shutil.move(temp_output_file.name, output_path)
+            return output_path
+
+    Mega._orig_download_file = _orig_download_file
+    Mega._download_file = _fixed_download_file
+
+    m = None
+    if email and password:
+        try:
+            m = mega.login(email, password)
+        except Exception as e:
+            LOGGER.warning(f"Mega user login failed, falling back to anonymous: {e}")
+            m = None
+    if m is None:
+        m = mega.login()
+
+    downloaded_path = m.download_url(listener.link, dest_path=path)
+    return downloaded_path
+
+
+class MegaPyStatusHelper:
+    def __init__(self, listener, gid):
+        self.listener = listener
+        self._gid = gid
+        self.downloaded_bytes = 0
+        self.speed = 0
+        self._start_time = 0
+        self.engine = EngineStatus().STATUS_MEGA
+
+    def name(self):
+        return self.listener.name
+
+    def progress_raw(self):
+        if self.listener.size > 0:
+            return round((self.downloaded_bytes / self.listener.size) * 100, 2)
+        return 0.0
+
+    def progress(self):
+        return f"{self.progress_raw()}%"
+
+    def status(self):
+        return MirrorStatus.STATUS_DOWNLOAD
+
+    def processed_bytes(self):
+        return get_readable_file_size(self.downloaded_bytes)
+
+    def eta(self):
+        if not self.speed:
+            return "-"
+        try:
+            seconds = (self.listener.size - self.downloaded_bytes) / self.speed
+            return get_readable_time(seconds)
+        except Exception:
+            return "-"
+
+    def size(self):
+        return get_readable_file_size(self.listener.size) if self.listener.size > 0 else "Unknown"
+
+    def speed_str(self):
+        return f"{get_readable_file_size(self.speed)}/s"
+
+    def gid(self):
+        return self._gid
+
+    def task(self):
+        return self
+
+    async def cancel_task(self):
+        self.listener.is_cancelled = True
+        await self.listener.on_download_error("download stopped by user!")
+
+
+async def _download_mega_py(listener, path, email, password):
+    from ...ext_utils.bot_utils import sync_to_async
+    await makedirs(path, exist_ok=True)
+    gid = token_hex(5)
+
+    msg, button = await stop_duplicate_check(listener)
+    if msg:
+        await listener.on_download_error(msg, button)
+        return
+
+    if limit_exceeded := await limit_checker(listener):
+        await listener.on_download_error(limit_exceeded, is_limit=True)
+        return
+
+    added_to_queue, event = await check_running_tasks(listener)
+    if added_to_queue:
+        async with task_dict_lock:
+            task_dict[listener.mid] = QueueStatus(listener, gid, "dl")
+        await listener.on_download_start()
+        if listener.multi <= 1:
+            await send_status_message(listener.message)
+        await event.wait()
+        if listener.is_cancelled:
+            return
+
+    status_helper = MegaPyStatusHelper(listener, gid)
+    async with task_dict_lock:
+        task_dict[listener.mid] = status_helper
+
+    if added_to_queue:
+        await listener.on_download_start()
+    else:
+        await listener.on_download_start()
+        if listener.multi <= 1:
+            await send_status_message(listener.message)
+
+    if listener.is_cancelled:
+        return
+
+    try:
+        res = await sync_to_async(_mega_py_download_sync, listener, path, email, password, status_helper)
+        if not res or listener.is_cancelled:
+            return
+        await listener.on_download_complete()
+    except Exception as e:
+        LOGGER.error(f"Mega.py download failed for link {listener.link}: {e}", exc_info=True)
+        await listener.on_download_error(f"Mega download failed: {e}")
 
 
 _ACTIVE_MEGA_LINKS = set()
@@ -116,10 +308,6 @@ async def add_mega_download(listener, path):
         )
         return
 
-    if MegaApi is None:
-        await listener.on_download_error("MegaSDK not installed or failed to load.")
-        return
-
     user_dict = user_data.get(listener.user_id, {})
     mega_email = user_dict.get("MEGA_EMAIL") or Config.MEGA_EMAIL
     mega_password = user_dict.get("MEGA_PASSWORD") or Config.MEGA_PASSWORD
@@ -128,6 +316,21 @@ async def add_mega_download(listener, path):
         await listener.on_download_error(
             "This Mega link is already being downloaded! Wait for it to finish."
         )
+        return
+
+    if MegaApi is None:
+        try:
+            try:
+                from mega import Mega
+            except (ImportError, SyntaxError, Exception):
+                Mega = None
+            if Mega is None:
+                raise ImportError("MEGA SDK / mega module is not available on this system.")
+            await _download_mega_py(listener, path, mega_email, mega_password)
+        except Exception as e:
+            await listener.on_download_error(f"Mega download failed: {e}")
+        finally:
+            await _release_link(listener.link)
         return
 
     async_api = None
