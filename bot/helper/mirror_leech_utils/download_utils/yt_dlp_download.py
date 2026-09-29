@@ -99,6 +99,7 @@ class YoutubeDLHelper:
                 "extractor": lambda n: 3,
             },
             "concurrent_fragment_downloads": 3,
+            "format": "bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/best",
         }
         cookie_to_use, err = get_cookie_file(self._listener.user_dict, self._listener.user_id)
         if cookie_to_use and ospath.exists(cookie_to_use):

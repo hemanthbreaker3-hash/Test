@@ -125,7 +125,11 @@ class YtSelection:
             format_dict = result.get("formats")
             if format_dict is not None:
                 for item in format_dict:
-                    if item.get("video_ext") == "none" and item.get("audio_ext") == "m4a":
+                    v_ext = item.get("video_ext")
+                    a_ext = item.get("audio_ext")
+                    vcodec = item.get("vcodec")
+                    acodec = item.get("acodec")
+                    if (v_ext == "none" or vcodec == "none") and (a_ext == "m4a" or acodec != "none"):
                         self._is_m4a = True
                         break
 
@@ -136,11 +140,18 @@ class YtSelection:
 
                     size = item.get("filesize") or item.get("filesize_approx") or 0
 
-                    if item.get("video_ext") == "none" and (
-                        item.get("resolution") == "audio only"
-                        or item.get("acodec") != "none"
-                    ):
-                        b_name = f"{item.get('acodec') or format_id}-{item.get('ext', 'audio')}"
+                    v_ext = item.get("video_ext")
+                    a_ext = item.get("audio_ext")
+                    vcodec = item.get("vcodec")
+                    acodec = item.get("acodec")
+                    resolution = item.get("resolution")
+
+                    is_audio_only = (v_ext == "none" or vcodec == "none") and (
+                        resolution == "audio only" or acodec != "none" or a_ext != "none"
+                    )
+
+                    if is_audio_only:
+                        b_name = f"{acodec or format_id}-{item.get('ext', 'audio')}"
                         v_format = format_id
                     elif item.get("height"):
                         height = item["height"]
@@ -169,6 +180,18 @@ class YtSelection:
                         buttons.data_button(buttonName, f"ytq sub {b_name} {tbr}")
                     else:
                         buttons.data_button(b_name, f"ytq dict {b_name}")
+
+            if not self.formats:
+                for i in ["144", "240", "360", "480", "720", "1080", "1440", "2160"]:
+                    video_format = f"bv*[height<=?{i}][ext=mp4]+ba[ext=m4a]/b[height<=?{i}]"
+                    b_data = f"{i}|mp4"
+                    self.formats[b_data] = video_format
+                    buttons.data_button(f"{i}-mp4", f"ytq {b_data}")
+                    video_format = f"bv*[height<=?{i}][ext=webm]+ba/b[height<=?{i}]"
+                    b_data = f"{i}|webm"
+                    self.formats[b_data] = video_format
+                    buttons.data_button(f"{i}-webm", f"ytq {b_data}")
+
             buttons.data_button("MP3", "ytq mp3")
             buttons.data_button("Audio Formats", "ytq audio")
             buttons.data_button("Best Video", "ytq bv*+ba/b")
