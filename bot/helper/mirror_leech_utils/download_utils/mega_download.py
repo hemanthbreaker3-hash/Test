@@ -115,8 +115,10 @@ async def _release_link(link: str):
         _ACTIVE_MEGA_LINKS.discard(link)
 
 
-def _mega_py_download_sync(listener, path, email, password):
+def _mega_py_download_sync(listener, path, email, password, status_helper=None):
     import re
+    from time import time
+    start_time = time()
     try:
         from mega import Mega
         from mega.errors import RequestError
@@ -270,6 +272,13 @@ def _mega_py_download_sync(listener, path, email, password):
 
                     file_info = os.stat(temp_output_file.name)
                     LOGGER.info('%s of %s downloaded', file_info.st_size, file_size)
+                    if status_helper is not None:
+                        status_helper.downloaded_bytes = file_info.st_size
+                        elapsed = time() - start_time
+                        if elapsed > 0:
+                            status_helper.speed = int(file_info.st_size / elapsed)
+                        if listener.size <= 0 and file_size > 0:
+                            listener.size = file_size
                 file_mac = str_to_a32(mac_str)
                 if len(file_mac) < 4:
                     file_mac = tuple(file_mac) + (0,) * (4 - len(file_mac))
@@ -294,6 +303,58 @@ def _mega_py_download_sync(listener, path, email, password):
 
     downloaded_path = m.download_url(listener.link, dest_path=path)
     return downloaded_path
+
+
+class MegaPyStatusHelper:
+    def __init__(self, listener, gid):
+        self.listener = listener
+        self._gid = gid
+        self.downloaded_bytes = 0
+        self.speed = 0
+        self._start_time = 0
+        self.engine = EngineStatus().STATUS_MEGA
+
+    def name(self):
+        return self.listener.name
+
+    def progress_raw(self):
+        if self.listener.size > 0:
+            return round((self.downloaded_bytes / self.listener.size) * 100, 2)
+        return 0.0
+
+    def progress(self):
+        return f"{self.progress_raw()}%"
+
+    def status(self):
+        return MirrorStatus.STATUS_DOWNLOAD
+
+    def processed_bytes(self):
+        return get_readable_file_size(self.downloaded_bytes)
+
+    def eta(self):
+        if not self.speed:
+            return "-"
+        try:
+            seconds = (self.listener.size - self.downloaded_bytes) / self.speed
+            return get_readable_time(seconds)
+        except Exception:
+            return "-"
+
+    def size(self):
+        return get_readable_file_size(self.listener.size) if self.listener.size > 0 else "Unknown"
+
+    def speed_str(self):
+        return f"{get_readable_file_size(self.speed)}/s"
+
+    def gid(self):
+        return self._gid
+
+    def task(self):
+        return self
+
+    async def cancel_task(self):
+        self.listener.is_cancelled = True
+        await self.listener.on_download_error("download stopped by user!")
 
 
 async def _download_mega_py(listener, path, email, password):
@@ -321,15 +382,22 @@ async def _download_mega_py(listener, path, email, password):
         if listener.is_cancelled:
             return
 
-    await listener.on_download_start()
-    if listener.multi <= 1:
-        await send_status_message(listener.message)
+    status_helper = MegaPyStatusHelper(listener, gid)
+    async with task_dict_lock:
+        task_dict[listener.mid] = status_helper
+
+    if added_to_queue:
+        await listener.on_download_start()
+    else:
+        await listener.on_download_start()
+        if listener.multi <= 1:
+            await send_status_message(listener.message)
 
     if listener.is_cancelled:
         return
 
     try:
-        res = await sync_to_async(_mega_py_download_sync, listener, path, email, password)
+        res = await sync_to_async(_mega_py_download_sync, listener, path, email, password, status_helper)
         if not res or listener.is_cancelled:
             return
         await listener.on_download_complete()
