@@ -33,9 +33,9 @@ from ...listeners.mega_listener import (
     MegaAppListener,
     MegaFolderListener,
     _call_attr,
-    _get_node_size,
-    _get_node_name,
     _get_node_handle,
+    _get_node_name,
+    _get_node_size,
     _is_node_folder,
     _mega_error_format,
     _MEGA_SDK_LOCK,
@@ -44,266 +44,49 @@ from ...mirror_leech_utils.status_utils.mega_status import MegaDownloadStatus
 from ...mirror_leech_utils.status_utils.queue_status import QueueStatus
 
 
-_ACTIVE_MEGA_LINKS = set()
-_ACTIVE_MEGA_LINKS_LOCK = AsyncLock()
+_MEGA_PY_PATCHED = False
 
-_MEGA_BASE64_ALPHABET = (
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
-)
-
-
-def _mega_base64_to_int(handle_str: str) -> int | None:
-    if not handle_str:
-        return None
+def _patch_mega_py():
+    global _MEGA_PY_PATCHED
+    if _MEGA_PY_PATCHED:
+        return
+    _MEGA_PY_PATCHED = True
     try:
-        val = 0
-        for c in handle_str:
-            idx = _MEGA_BASE64_ALPHABET.find(c)
-            if idx < 0:
-                return None
-            val = (val << 6) | idx
-        return val & ((1 << 64) - 1)
-    except Exception:
-        return None
-
-
-def _find_child_by_handle(api, parent_node, target_handle):
-    if not parent_node or not target_handle:
-        return None
-    try:
-        children = _call_attr(api, "getChildren", None, parent_node)
-        return _find_child_in_list(children, target_handle)
-    except Exception as e:
-        LOGGER.warning(f"_find_child_by_handle error: {e}")
-    return None
-
-
-def _find_child_in_list(children, target_handle):
-    if not children:
-        return None
-    target_int = _mega_base64_to_int(target_handle)
-    try:
-        _to_handle = getattr(MegaApi, "base64ToHandle", None)
-        if callable(_to_handle) and target_int is None:
-            target_int = _to_handle(target_handle)
+        from mega.errors import RequestError
+        if not getattr(RequestError, "_is_patched", False):
+            _orig_init = RequestError.__init__
+            def _patched_init(self, message):
+                if isinstance(message, int):
+                    _orig_init(self, message)
+                else:
+                    self.code = -1
+                    self.message = str(message)
+            RequestError.__init__ = _patched_init
+            RequestError._is_patched = True
     except Exception:
         pass
-    sz = _call_attr(children, "size", 0)
-    for i in range(sz):
-        child = _call_attr(children, "get", None, i)
-        try:
-            ch = _get_node_handle(child)
-            ch_name = _get_node_name(child)
-            if (
-                ch == target_handle
-                or (target_int is not None and ch == target_int)
-                or ch_name == target_handle
-            ):
-                return child
-        except Exception:
-            pass
-    return None
 
-
-def _make_cancel_token():
-    if MegaCancelToken is None:
-        return None
     try:
-        return MegaCancelToken.createInstance()
-    except Exception as e:
-        LOGGER.error(f"Mega: failed to create cancel token: {e}")
-        return None
-
-
-async def _reserve_link(link: str):
-    async with _ACTIVE_MEGA_LINKS_LOCK:
-        if link in _ACTIVE_MEGA_LINKS:
-            return False
-        _ACTIVE_MEGA_LINKS.add(link)
-        return True
-
-
-async def _release_link(link: str):
-    async with _ACTIVE_MEGA_LINKS_LOCK:
-        _ACTIVE_MEGA_LINKS.discard(link)
+        import re
+        from mega import Mega
+        if not getattr(Mega, "_is_patched", False):
+            _orig_parse_url = Mega.parse_url
+            def _patched_parse_url(self, url):
+                m = re.search(r"mega\.(?:co\.)?nz/(file|folder)/([^#]+)#(.+)", url)
+                if m:
+                    prefix = "#F!" if m.group(1) == "folder" else "#!"
+                    url = f"https://mega.nz/{prefix}{m.group(2)}!{m.group(3)}"
+                return _orig_parse_url(self, url)
+            Mega.parse_url = _patched_parse_url
+            Mega._is_patched = True
+    except Exception:
+        pass
 
 
 def _mega_py_download_sync(listener, path, email, password, status_helper=None):
-    import re
-    from time import time
-    start_time = time()
-    try:
-        from mega import Mega
-        from mega.errors import RequestError
-        mega = Mega()
-    except Exception as e:
-        raise ImportError(f"Mega module import failed: {e}")
-
-    if not hasattr(RequestError, "_patched_for_str"):
-        _orig_req_init = RequestError.__init__
-        def _safe_req_init(self, message, code=None):
-            if isinstance(message, int):
-                _orig_req_init(self, message)
-            else:
-                self.message = str(message)
-                self.code = code
-        RequestError.__init__ = _safe_req_init
-        RequestError._patched_for_str = True
-
-    def _patched_parse_url(self, url):
-        url = url.strip().replace(" ", "")
-        if "/file/" in url:
-            m = re.search(r"/file/([^#?]+)#([^?]+)", url)
-            if m:
-                return f"{m.group(1)}!{m.group(2)}"
-        if "/folder/" in url:
-            m = re.search(r"/folder/([^#?]+)#([^?]+)", url)
-            if m:
-                return f"{m.group(1)}!{m.group(2)}"
-        if "/#F!" in url:
-            m = re.search(r"/#F!([^?]+)", url)
-            if m:
-                return m.group(1)
-        if "/#!" in url:
-            m = re.search(r"/#!([^?]+)", url)
-            if m:
-                return m.group(1)
-        if "/embed/" in url:
-            m = re.search(r"/embed/([^#?]+)#([^?]+)", url)
-            if m:
-                return f"{m.group(1)}!{m.group(2)}"
-        if "!" in url:
-            m = re.search(r"!?([a-zA-Z0-9_-]+![a-zA-Z0-9_-]+)", url)
-            if m:
-                return m.group(1)
-        raise ValueError(f"Invalid Mega URL format: {url}")
-
-    Mega._parse_url = _patched_parse_url
-
-    if not hasattr(Mega, "_orig_download_file"):
-        from mega.crypto import (
-            base64_to_a32,
-            decrypt_attr,
-            base64_url_decode,
-            a32_to_str,
-            get_chunks,
-            str_to_a32,
-        )
-        from Crypto.Cipher import AES
-        from Crypto.Util import Counter
-        import requests
-        import tempfile
-        import shutil
-        from pathlib import Path
-        import os
-
-        _orig_download_file = Mega._download_file
-
-        def _fixed_download_file(self, file_handle, file_key, dest_path=None, dest_filename=None, is_public=False, file=None):
-            if file is None:
-                if isinstance(file_key, str):
-                    file_key = base64_to_a32(file_key)
-                if is_public:
-                    file_data = self._api_request({'a': 'g', 'g': 1, 'p': file_handle})
-                else:
-                    file_data = self._api_request({'a': 'g', 'g': 1, 'n': file_handle})
-
-                if len(file_key) < 8:
-                    file_key = tuple(file_key) + (0,) * (8 - len(file_key))
-
-                k = (file_key[0] ^ file_key[4], file_key[1] ^ file_key[5],
-                     file_key[2] ^ file_key[6], file_key[3] ^ file_key[7])
-                iv = file_key[4:6] + (0, 0)
-                meta_mac = file_key[6:8]
-            else:
-                file_data = self._api_request({'a': 'g', 'g': 1, 'n': file['h']})
-                k = file['k']
-                iv = file['iv']
-                meta_mac = file['meta_mac']
-
-            if len(k) < 8:
-                k = tuple(k) + (0,) * (8 - len(k))
-            if len(iv) < 4:
-                iv = tuple(iv) + (0,) * (4 - len(iv))
-            if len(meta_mac) < 2:
-                meta_mac = tuple(meta_mac) + (0,) * (2 - len(meta_mac))
-
-            if 'g' not in file_data:
-                from mega.errors import RequestError
-                raise RequestError('File not accessible anymore')
-            file_url = file_data['g']
-            file_size = file_data['s']
-            attribs = base64_url_decode(file_data['at'])
-            attribs = decrypt_attr(attribs, k)
-
-            if dest_filename is not None:
-                file_name = dest_filename
-            elif isinstance(attribs, dict) and 'n' in attribs:
-                file_name = attribs['n']
-            else:
-                file_name = f"mega_file_{file_handle or 'dl'}"
-
-            input_file = requests.get(file_url, stream=True).raw
-
-            if dest_path is None:
-                dest_path = ''
-            else:
-                dest_path += '/'
-
-            with tempfile.NamedTemporaryFile(mode='w+b', prefix='megapy_', delete=False) as temp_output_file:
-                k_str = a32_to_str(k)
-                counter = Counter.new(128, initial_value=((iv[0] << 32) + iv[1]) << 64)
-                aes = AES.new(k_str, AES.MODE_CTR, counter=counter)
-
-                mac_str = '\0' * 16
-                mac_encryptor = AES.new(k_str, AES.MODE_CBC, mac_str.encode("utf8"))
-                iv_str = a32_to_str([iv[0], iv[1], iv[0], iv[1]])
-
-                for chunk_start, chunk_size in get_chunks(file_size):
-                    chunk = input_file.read(chunk_size)
-                    chunk = aes.decrypt(chunk)
-                    temp_output_file.write(chunk)
-
-                    encryptor = AES.new(k_str, AES.MODE_CBC, iv_str)
-                    i = 0
-                    for i in range(0, len(chunk) - 16, 16):
-                        block = chunk[i:i + 16]
-                        encryptor.encrypt(block)
-
-                    if file_size > 16:
-                        if len(chunk) > 16:
-                            i += 16
-                        else:
-                            i = 0
-                    else:
-                        i = 0
-
-                    block = chunk[i:i + 16]
-                    if len(block) % 16:
-                        block += b'\0' * (16 - (len(block) % 16))
-                    mac_str = mac_encryptor.encrypt(encryptor.encrypt(block))
-
-                    file_info = os.stat(temp_output_file.name)
-                    LOGGER.info('%s of %s downloaded', file_info.st_size, file_size)
-                    if status_helper is not None:
-                        status_helper.downloaded_bytes = file_info.st_size
-                        elapsed = time() - start_time
-                        if elapsed > 0:
-                            status_helper.speed = int(file_info.st_size / elapsed)
-                        if listener.size <= 0 and file_size > 0:
-                            listener.size = file_size
-                file_mac = str_to_a32(mac_str)
-                if len(file_mac) < 4:
-                    file_mac = tuple(file_mac) + (0,) * (4 - len(file_mac))
-                if (file_mac[0] ^ file_mac[1], file_mac[2] ^ file_mac[3]) != meta_mac:
-                    LOGGER.debug("Mega MAC integrity check mismatch, proceeding with download.")
-                output_path = Path(dest_path + file_name)
-                shutil.move(temp_output_file.name, output_path)
-                return output_path
-
-        Mega._orig_download_file = _orig_download_file
-        Mega._download_file = _fixed_download_file
-
+    _patch_mega_py()
+    from mega import Mega
+    mega = Mega()
     m = None
     if email and password:
         try:
@@ -419,6 +202,88 @@ async def _download_mega_py(listener, path, email, password):
         await listener.on_download_error(f"Mega download failed: {e}")
 
 
+_ACTIVE_MEGA_LINKS = set()
+_ACTIVE_MEGA_LINKS_LOCK = AsyncLock()
+
+_MEGA_BASE64_ALPHABET = (
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+)
+
+
+def _mega_base64_to_int(handle_str: str) -> int | None:
+    if not handle_str:
+        return None
+    try:
+        val = 0
+        for c in handle_str:
+            idx = _MEGA_BASE64_ALPHABET.find(c)
+            if idx < 0:
+                return None
+            val = (val << 6) | idx
+        return val & ((1 << 64) - 1)
+    except Exception:
+        return None
+
+
+def _find_child_by_handle(api, parent_node, target_handle):
+    if not parent_node or not target_handle:
+        return None
+    try:
+        children = api.getChildren(parent_node)
+        return _find_child_in_list(children, target_handle)
+    except Exception as e:
+        LOGGER.warning(f"_find_child_by_handle error: {e}")
+    return None
+
+
+def _find_child_in_list(children, target_handle):
+    if not children:
+        return None
+    try:
+        _to_handle = getattr(MegaApi, "base64ToHandle", None)
+        target_int = _to_handle(target_handle) if callable(_to_handle) else None
+    except Exception:
+        target_int = None
+    sz = _call_attr(children, "size", 0)
+    for i in range(sz):
+        child = _call_attr(children, "get", None, i)
+        try:
+            ch = _get_node_handle(child)
+            ch_name = _get_node_name(child)
+            if (
+                ch == target_handle
+                or (target_int is not None and ch == target_int)
+                or ch_name == target_handle
+            ):
+                return child
+        except Exception:
+            pass
+    return None
+
+
+def _make_cancel_token():
+    if MegaCancelToken is None:
+        return None
+    try:
+        return MegaCancelToken.createInstance()
+    except Exception as e:
+        LOGGER.error(f"Mega: failed to create cancel token: {e}")
+        return None
+
+
+async def _reserve_link(link: str):
+    async with _ACTIVE_MEGA_LINKS_LOCK:
+        if link in _ACTIVE_MEGA_LINKS:
+            return False
+        _ACTIVE_MEGA_LINKS.add(link)
+        return True
+
+
+async def _release_link(link: str):
+    async with _ACTIVE_MEGA_LINKS_LOCK:
+        _ACTIVE_MEGA_LINKS.discard(link)
+
+
 async def add_mega_download(listener, path):
     if Config.DISABLE_MEGA:
         await listener.on_download_error(
@@ -453,7 +318,6 @@ async def add_mega_download(listener, path):
 
     async_api = None
     mega_base = ""
-    is_folder = False
     try:
         sdk_gid = token_hex(5)
         await makedirs(path, exist_ok=True)
@@ -464,7 +328,7 @@ async def add_mega_download(listener, path):
         await makedirs(mega_dir, exist_ok=True)
 
         async_api = AsyncMega()
-        async_api.api = api = MegaApi("", mega_dir, "HTR-X", 4)
+        async_api.api = api = MegaApi("", mega_dir, "WZML-X", 4)
         mega_listener = MegaAppListener(async_api, listener)
         async_api._mega_listener = mega_listener
         api.addListener(mega_listener)
@@ -474,7 +338,7 @@ async def add_mega_download(listener, path):
         subfolder_handle = get_mega_subfolder_handle(listener.link)
 
         if is_folder:
-            async_api.folder_api = folder_api = MegaApi("", mega_dir, "HTR-X", 4)
+            async_api.folder_api = folder_api = MegaApi("", mega_dir, "WZML-X", 4)
 
             # Authenticate folder API with the configured premium MEGA account.
             if mega_email and mega_password:
@@ -557,7 +421,6 @@ async def add_mega_download(listener, path):
                 if listener.is_cancelled or mega_listener.is_cancelled:
                     return
                 if mega_listener.error:
-                    LOGGER.error("Mega login error: %s", mega_listener.error)
                     await listener.on_download_error(
                         _mega_error_format(mega_listener.error)
                     )
@@ -566,7 +429,6 @@ async def add_mega_download(listener, path):
                 if listener.is_cancelled or mega_listener.is_cancelled:
                     return
                 if mega_listener.error:
-                    LOGGER.error("Mega fetchNodes error: %s", mega_listener.error)
                     await listener.on_download_error(
                         _mega_error_format(mega_listener.error)
                     )

@@ -98,7 +98,6 @@ class YoutubeDLHelper:
                 "file_access": lambda n: 3,
                 "extractor": lambda n: 3,
             },
-            "concurrent_fragment_downloads": 3,
         }
         cookie_to_use, err = get_cookie_file(self._listener.user_dict, self._listener.user_id)
         if cookie_to_use and ospath.exists(cookie_to_use):
@@ -401,11 +400,6 @@ class YoutubeDLHelper:
             elif key == "download_ranges":
                 if isinstance(value, list):
                     self.opts[key] = lambda info, ytdl: value
-            elif key == "cookiefile":
-                if value and ospath.exists(str(value)):
-                    self.opts[key] = str(value)
-                else:
-                    self.opts.pop("cookiefile", None)
             else:
                 if key == "writethumbnail" and value is True:
                     self.keep_thumb = True

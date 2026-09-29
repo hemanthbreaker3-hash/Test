@@ -41,7 +41,7 @@ async def add_mega_clone(listener, link, mega_email, mega_password, gid):
     await makedirs(mega_dir, exist_ok=True)
 
     async_api = AsyncMega()
-    async_api.api = api = MegaApi("", mega_dir, "HTR-X", 4)
+    async_api.api = api = MegaApi("", mega_dir, "WZML-X", 4)
     await asleep(0.1)
     mega_listener = MegaAppListener(async_api, listener)
     async_api._mega_listener = mega_listener
@@ -115,7 +115,6 @@ async def add_mega_clone(listener, link, mega_email, mega_password, gid):
             except Exception:
                 pass
             try:
-                if async_api.api is not None and async_api._mega_listener is not None:
-                    async_api.api.removeListener(async_api._mega_listener)
+                api.removeListener(mega_listener)
             except Exception:
                 pass

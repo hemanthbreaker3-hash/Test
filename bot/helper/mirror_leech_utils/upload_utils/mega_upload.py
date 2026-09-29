@@ -173,7 +173,7 @@ async def add_mega_upload(listener, path, mega_email, mega_password, gid):
     await makedirs(mega_dir, exist_ok=True)
 
     async_api = AsyncMega()
-    async_api.api = api = MegaApi("", mega_dir, "HTR-X", 4)
+    async_api.api = api = MegaApi("", mega_dir, "WZML-X", 4)
     await asleep(0.1)
     mega_listener = MegaAppListener(async_api, listener)
     mega_listener._upload_mode = True
@@ -264,8 +264,6 @@ async def add_mega_upload(listener, path, mega_email, mega_password, gid):
                     )
                     if ok:
                         uploaded_files += 1
-                        mega_listener._total_downloaded_bytes += mega_listener._size
-                        mega_listener._bytes_transferred = 0
                     else:
                         if not listener.is_cancelled and not mega_listener.is_cancelled:
                             await listener.on_upload_error(f"MegaUpload failed for {f}")
