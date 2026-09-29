@@ -101,6 +101,20 @@ class TestWatermarkSequenceMega(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(_mega_error_format("-16"), "Account or file(s) blocked/banned")
         self.assertEqual(_mega_error_format("-17"), "Storage quota exceeded")
 
+    def test_async_mega_request_matching(self):
+        from bot.helper.listeners.mega_listener import AsyncMega, MegaAppListener
+        async_mega = AsyncMega()
+        listener = MegaAppListener(async_mega, None)
+
+        async_mega._expected_request_type = (1, 2, 3)
+        self.assertTrue(listener._is_expected_request(1))
+        self.assertFalse(listener._is_expected_request(99))
+
+    def test_mega_utils_no_credentials(self):
+        from bot.helper.ext_utils.mega_utils import _get_mega_account_info_sync
+        res = _get_mega_account_info_sync("", "")
+        self.assertIn("No credentials configured", res)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -115,6 +115,7 @@ async def add_mega_clone(listener, link, mega_email, mega_password, gid):
             except Exception:
                 pass
             try:
-                api.removeListener(mega_listener)
+                if async_api.api is not None and async_api._mega_listener is not None:
+                    async_api.api.removeListener(async_api._mega_listener)
             except Exception:
                 pass

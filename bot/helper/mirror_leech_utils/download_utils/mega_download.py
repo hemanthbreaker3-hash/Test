@@ -22,10 +22,21 @@ from ...ext_utils.task_manager import (
 )
 from ...ext_utils.files_utils import clean_download
 from ...ext_utils.links_utils import get_mega_subfolder_handle, is_mega_folder_link
+from ...ext_utils.status_utils import (
+    MirrorStatus,
+    EngineStatus,
+    get_readable_file_size,
+    get_readable_time,
+)
 from ...listeners.mega_listener import (
     AsyncMega,
     MegaAppListener,
     MegaFolderListener,
+    _call_attr,
+    _get_node_size,
+    _get_node_name,
+    _get_node_handle,
+    _is_node_folder,
     _mega_error_format,
     _MEGA_SDK_LOCK,
 )
@@ -60,7 +71,7 @@ def _find_child_by_handle(api, parent_node, target_handle):
     if not parent_node or not target_handle:
         return None
     try:
-        children = api.getChildren(parent_node)
+        children = _call_attr(api, "getChildren", None, parent_node)
         return _find_child_in_list(children, target_handle)
     except Exception as e:
         LOGGER.warning(f"_find_child_by_handle error: {e}")
@@ -77,14 +88,16 @@ def _find_child_in_list(children, target_handle):
             target_int = _to_handle(target_handle)
     except Exception:
         pass
-    for i in range(children.size()):
-        child = children.get(i)
+    sz = _call_attr(children, "size", 0)
+    for i in range(sz):
+        child = _call_attr(children, "get", None, i)
         try:
-            ch = child.getHandle()
+            ch = _get_node_handle(child)
+            ch_name = _get_node_name(child)
             if (
                 ch == target_handle
                 or (target_int is not None and ch == target_int)
-                or (hasattr(child, "getName") and child.getName() == target_handle)
+                or ch_name == target_handle
             ):
                 return child
         except Exception:
@@ -115,13 +128,27 @@ async def _release_link(link: str):
         _ACTIVE_MEGA_LINKS.discard(link)
 
 
-def _mega_py_download_sync(listener, path, email, password):
+def _mega_py_download_sync(listener, path, email, password, status_helper=None):
     import re
+    from time import time
+    start_time = time()
     try:
         from mega import Mega
+        from mega.errors import RequestError
         mega = Mega()
     except Exception as e:
         raise ImportError(f"Mega module import failed: {e}")
+
+    if not hasattr(RequestError, "_patched_for_str"):
+        _orig_req_init = RequestError.__init__
+        def _safe_req_init(self, message, code=None):
+            if isinstance(message, int):
+                _orig_req_init(self, message)
+            else:
+                self.message = str(message)
+                self.code = code
+        RequestError.__init__ = _safe_req_init
+        RequestError._patched_for_str = True
 
     def _patched_parse_url(self, url):
         url = url.strip().replace(" ", "")
@@ -258,6 +285,13 @@ def _mega_py_download_sync(listener, path, email, password):
 
                     file_info = os.stat(temp_output_file.name)
                     LOGGER.info('%s of %s downloaded', file_info.st_size, file_size)
+                    if status_helper is not None:
+                        status_helper.downloaded_bytes = file_info.st_size
+                        elapsed = time() - start_time
+                        if elapsed > 0:
+                            status_helper.speed = int(file_info.st_size / elapsed)
+                        if listener.size <= 0 and file_size > 0:
+                            listener.size = file_size
                 file_mac = str_to_a32(mac_str)
                 if len(file_mac) < 4:
                     file_mac = tuple(file_mac) + (0,) * (4 - len(file_mac))
@@ -282,6 +316,58 @@ def _mega_py_download_sync(listener, path, email, password):
 
     downloaded_path = m.download_url(listener.link, dest_path=path)
     return downloaded_path
+
+
+class MegaPyStatusHelper:
+    def __init__(self, listener, gid):
+        self.listener = listener
+        self._gid = gid
+        self.downloaded_bytes = 0
+        self.speed = 0
+        self._start_time = 0
+        self.engine = EngineStatus().STATUS_MEGA
+
+    def name(self):
+        return self.listener.name
+
+    def progress_raw(self):
+        if self.listener.size > 0:
+            return round((self.downloaded_bytes / self.listener.size) * 100, 2)
+        return 0.0
+
+    def progress(self):
+        return f"{self.progress_raw()}%"
+
+    def status(self):
+        return MirrorStatus.STATUS_DOWNLOAD
+
+    def processed_bytes(self):
+        return get_readable_file_size(self.downloaded_bytes)
+
+    def eta(self):
+        if not self.speed:
+            return "-"
+        try:
+            seconds = (self.listener.size - self.downloaded_bytes) / self.speed
+            return get_readable_time(seconds)
+        except Exception:
+            return "-"
+
+    def size(self):
+        return get_readable_file_size(self.listener.size) if self.listener.size > 0 else "Unknown"
+
+    def speed_str(self):
+        return f"{get_readable_file_size(self.speed)}/s"
+
+    def gid(self):
+        return self._gid
+
+    def task(self):
+        return self
+
+    async def cancel_task(self):
+        self.listener.is_cancelled = True
+        await self.listener.on_download_error("download stopped by user!")
 
 
 async def _download_mega_py(listener, path, email, password):
@@ -309,15 +395,22 @@ async def _download_mega_py(listener, path, email, password):
         if listener.is_cancelled:
             return
 
-    await listener.on_download_start()
-    if listener.multi <= 1:
-        await send_status_message(listener.message)
+    status_helper = MegaPyStatusHelper(listener, gid)
+    async with task_dict_lock:
+        task_dict[listener.mid] = status_helper
+
+    if added_to_queue:
+        await listener.on_download_start()
+    else:
+        await listener.on_download_start()
+        if listener.multi <= 1:
+            await send_status_message(listener.message)
 
     if listener.is_cancelled:
         return
 
     try:
-        res = await sync_to_async(_mega_py_download_sync, listener, path, email, password)
+        res = await sync_to_async(_mega_py_download_sync, listener, path, email, password, status_helper)
         if not res or listener.is_cancelled:
             return
         await listener.on_download_complete()
@@ -451,13 +544,9 @@ async def add_mega_download(listener, path):
                 dl_listener._cache_node_data(node)
                 LOGGER.info("Mega: subfolder name=%s", dl_listener._name)
 
-                dl_listener._size = listener.size
-                if not dl_listener._size:
-                    try:
-                        s = node.getSize()
-                        dl_listener._size = s if s < (1 << 62) else -1
-                    except Exception:
-                        pass
+                dl_listener._size = listener.size or _get_node_size(node, folder_api)
+                if not dl_listener._size or dl_listener._size >= (1 << 62):
+                    dl_listener._size = -1
                 LOGGER.info("Mega: subfolder size=%s", dl_listener._size)
             else:
                 node = dl_listener.node
@@ -500,11 +589,8 @@ async def add_mega_download(listener, path):
         )
         listener.size = dl_listener._size if dl_listener._size < (1 << 62) else -1
         if listener.size <= 0 and node:
-            try:
-                s = node.getSize()
-                listener.size = s if s < (1 << 62) else -1
-            except Exception:
-                pass
+            s = _get_node_size(node)
+            listener.size = s if s < (1 << 62) else -1
         gid = token_hex(5)
         msg, button = await stop_duplicate_check(listener)
         if msg:
