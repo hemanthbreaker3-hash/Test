@@ -32,6 +32,10 @@ from ...listeners.mega_listener import (
     AsyncMega,
     MegaAppListener,
     MegaFolderListener,
+    _get_node_size,
+    _get_node_name,
+    _get_node_handle,
+    _is_node_folder,
     _mega_error_format,
     _MEGA_SDK_LOCK,
 )
@@ -537,13 +541,9 @@ async def add_mega_download(listener, path):
                 dl_listener._cache_node_data(node)
                 LOGGER.info("Mega: subfolder name=%s", dl_listener._name)
 
-                dl_listener._size = listener.size
-                if not dl_listener._size:
-                    try:
-                        s = node.getSize()
-                        dl_listener._size = s if s < (1 << 62) else -1
-                    except Exception:
-                        pass
+                dl_listener._size = listener.size or _get_node_size(node, folder_api)
+                if not dl_listener._size or dl_listener._size >= (1 << 62):
+                    dl_listener._size = -1
                 LOGGER.info("Mega: subfolder size=%s", dl_listener._size)
             else:
                 node = dl_listener.node
@@ -586,11 +586,8 @@ async def add_mega_download(listener, path):
         )
         listener.size = dl_listener._size if dl_listener._size < (1 << 62) else -1
         if listener.size <= 0 and node:
-            try:
-                s = node.getSize()
-                listener.size = s if s < (1 << 62) else -1
-            except Exception:
-                pass
+            s = _get_node_size(node)
+            listener.size = s if s < (1 << 62) else -1
         gid = token_hex(5)
         msg, button = await stop_duplicate_check(listener)
         if msg:

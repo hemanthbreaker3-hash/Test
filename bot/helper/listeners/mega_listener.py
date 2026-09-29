@@ -103,6 +103,59 @@ def _mega_error_format(raw_error):
     return raw_error
 
 
+def _get_node_size(node, api=None):
+    if not node:
+        return 0
+    if api is not None and hasattr(api, "getSize"):
+        try:
+            attr = getattr(api, "getSize")
+            sz = attr(node) if callable(attr) else attr
+            if isinstance(sz, int) and sz >= 0:
+                return sz
+        except Exception:
+            pass
+    if hasattr(node, "getSize"):
+        try:
+            attr = getattr(node, "getSize")
+            sz = attr() if callable(attr) else attr
+            if isinstance(sz, int) and sz >= 0:
+                return sz
+        except Exception:
+            pass
+    return 0
+
+
+def _get_node_name(node):
+    if not node or not hasattr(node, "getName"):
+        return ""
+    try:
+        attr = getattr(node, "getName")
+        res = attr() if callable(attr) else attr
+        return str(res) if res is not None else ""
+    except Exception:
+        return ""
+
+
+def _get_node_handle(node):
+    if not node or not hasattr(node, "getHandle"):
+        return None
+    try:
+        attr = getattr(node, "getHandle")
+        return attr() if callable(attr) else attr
+    except Exception:
+        return None
+
+
+def _is_node_folder(node):
+    if not node or not hasattr(node, "isFolder"):
+        return False
+    try:
+        attr = getattr(node, "isFolder")
+        return bool(attr() if callable(attr) else attr)
+    except Exception:
+        return False
+
+
 class AsyncMega:
     def __init__(self):
         self.api = None
@@ -554,18 +607,11 @@ class MegaAppListener(MegaListener):
             LOGGER.error(f"Mega export future create failed: {e}")
 
     def _cache_node_data(self, node):
-        try:
-            self._name = node.getName()
-        except Exception:
-            pass
-        try:
-            self._handle = node.getHandle()
-        except Exception:
-            pass
-        try:
-            self._is_folder = node.isFolder()
-        except Exception:
-            pass
+        if not node:
+            return
+        self._name = _get_node_name(node)
+        self._handle = _get_node_handle(node)
+        self._is_folder = _is_node_folder(node)
 
     def _is_expected_request(self, request_type):
         expected = self._async_api._expected_request_type
@@ -650,10 +696,7 @@ class MegaAppListener(MegaListener):
                     self.public_node = None
                 if self.public_node:
                     self._cache_node_data(self.public_node)
-                    try:
-                        self._size = self.public_node.getSize()
-                    except Exception:
-                        pass
+                    self._size = _get_node_size(self.public_node, api)
             elif request_type == MegaRequest.TYPE_LOGIN:
                 try:
                     fut = self._async_api._request_future
@@ -671,12 +714,8 @@ class MegaAppListener(MegaListener):
                 LOGGER.info("MEGA DEBUG FETCH: root=%s", root_node)
                 self.node = root_node
                 if self.node:
-                    LOGGER.info("MEGA DEBUG FETCH: name=%s handle=%s folder=%s", self.node.getName(), self.node.getHandle(), self.node.isFolder())
                     self._cache_node_data(self.node)
-                    try:
-                        self._size = self.node.getSize()
-                    except Exception:
-                        pass
+                    self._size = _get_node_size(self.node, api)
             elif request_type == MegaRequest.TYPE_EXPORT:
                 try:
                     self._export_link = request.getLink()
@@ -702,9 +741,9 @@ class MegaAppListener(MegaListener):
                     handle = request.getNodeHandle()
                     node = api.getNodeByHandle(handle) if handle else None
                     if node:
-                        name = node.getName()
-                        size = node.getSize()
-                        is_folder = node.isFolder()
+                        name = _get_node_name(node)
+                        size = _get_node_size(node, api)
+                        is_folder = _is_node_folder(node)
                         self._imported_node_name = name
                         self._imported_node_size = size
                         self._imported_node_is_folder = is_folder
@@ -1118,13 +1157,7 @@ class MegaFolderListener(MegaListener):
                 self.node = root_node
                 if self.node:
                     self._cache_node_data(self.node)
-                    try:
-                        self._size = api.getSize(self.node)
-                    except Exception:
-                        try:
-                            self._size = self.node.getSize()
-                        except Exception:
-                            self._size = 0
+                    self._size = _get_node_size(self.node, api)
                     try:
                         self._children = api.getChildren(self.node)
                     except Exception:
