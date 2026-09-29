@@ -17,6 +17,7 @@ except (ImportError, SyntaxError, Exception):
 
 from .bot_utils import sync_to_async
 from .status_utils import get_readable_file_size
+from ..listeners.mega_listener import _call_attr, _get_node_handle
 
 
 class MegaAccountListener(MegaListener):
@@ -30,37 +31,38 @@ class MegaAccountListener(MegaListener):
 
     def onRequestFinish(self, api, request, error):
         try:
-            req_type = request.getType()
+            req_type = _call_attr(request, "getType", None)
             if req_type != self.expected_type:
                 return
-            err_code = error.getErrorCode() if error else MegaError.API_OK
+            err_code = _call_attr(error, "getErrorCode", MegaError.API_OK) if error else MegaError.API_OK
             if err_code != MegaError.API_OK:
-                self.error = error.toString()
+                self.error = _call_attr(error, "toString", "API error")
             elif req_type == MegaRequest.TYPE_ACCOUNT_DETAILS:
-                ad = request.getMegaAccountDetails()
+                ad = _call_attr(request, "getMegaAccountDetails", None)
                 if ad is None:
                     self.error = "getMegaAccountDetails returned None"
                 else:
                     info = {
-                        "storage_max": ad.getStorageMax(),
-                        "storage_used": ad.getStorageUsed(),
-                        "transfer_max": ad.getTransferMax(),
-                        "transfer_used": ad.getTransferUsed(),
-                        "pro_level": ad.getProLevel(),
-                        "pro_expiration": ad.getProExpiration(),
+                        "storage_max": _call_attr(ad, "getStorageMax", 0),
+                        "storage_used": _call_attr(ad, "getStorageUsed", 0),
+                        "transfer_max": _call_attr(ad, "getTransferMax", 0),
+                        "transfer_used": _call_attr(ad, "getTransferUsed", 0),
+                        "pro_level": _call_attr(ad, "getProLevel", 0),
+                        "pro_expiration": _call_attr(ad, "getProExpiration", 0),
                     }
                     try:
-                        root_handle = api.getRootNode().getHandle()
-                        info["num_files"] = ad.getNumFiles(root_handle)
-                        info["num_folders"] = ad.getNumFolders(root_handle)
-                        self.root_handle = root_handle
+                        root_handle = _get_node_handle(api.getRootNode())
+                        if root_handle is not None:
+                            info["num_files"] = _call_attr(ad, "getNumFiles", 0, root_handle)
+                            info["num_folders"] = _call_attr(ad, "getNumFolders", 0, root_handle)
+                            self.root_handle = root_handle
                     except Exception:
                         pass
                     self.result = info
             elif req_type == MegaRequest.TYPE_FETCH_NODES:
                 self.result = True
                 try:
-                    self.root_handle = api.getRootNode().getHandle()
+                    self.root_handle = _get_node_handle(api.getRootNode())
                 except Exception:
                     pass
             elif req_type == MegaRequest.TYPE_LOGIN:

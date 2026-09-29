@@ -32,6 +32,7 @@ from ...listeners.mega_listener import (
     AsyncMega,
     MegaAppListener,
     MegaFolderListener,
+    _call_attr,
     _get_node_size,
     _get_node_name,
     _get_node_handle,
@@ -70,7 +71,7 @@ def _find_child_by_handle(api, parent_node, target_handle):
     if not parent_node or not target_handle:
         return None
     try:
-        children = api.getChildren(parent_node)
+        children = _call_attr(api, "getChildren", None, parent_node)
         return _find_child_in_list(children, target_handle)
     except Exception as e:
         LOGGER.warning(f"_find_child_by_handle error: {e}")
@@ -87,14 +88,16 @@ def _find_child_in_list(children, target_handle):
             target_int = _to_handle(target_handle)
     except Exception:
         pass
-    for i in range(children.size()):
-        child = children.get(i)
+    sz = _call_attr(children, "size", 0)
+    for i in range(sz):
+        child = _call_attr(children, "get", None, i)
         try:
-            ch = child.getHandle()
+            ch = _get_node_handle(child)
+            ch_name = _get_node_name(child)
             if (
                 ch == target_handle
                 or (target_int is not None and ch == target_int)
-                or (hasattr(child, "getName") and child.getName() == target_handle)
+                or ch_name == target_handle
             ):
                 return child
         except Exception:

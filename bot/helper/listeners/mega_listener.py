@@ -103,57 +103,45 @@ def _mega_error_format(raw_error):
     return raw_error
 
 
+def _call_attr(obj, attr_name, default=None, *args, **kwargs):
+    if obj is None or not hasattr(obj, attr_name):
+        return default
+    try:
+        val = getattr(obj, attr_name)
+        if callable(val):
+            return val(*args, **kwargs)
+        return val
+    except Exception:
+        return default
+
+
 def _get_node_size(node, api=None):
     if not node:
         return 0
     if api is not None and hasattr(api, "getSize"):
         try:
-            attr = getattr(api, "getSize")
-            sz = attr(node) if callable(attr) else attr
+            sz = _call_attr(api, "getSize", None, node)
             if isinstance(sz, int) and sz >= 0:
                 return sz
         except Exception:
             pass
-    if hasattr(node, "getSize"):
-        try:
-            attr = getattr(node, "getSize")
-            sz = attr() if callable(attr) else attr
-            if isinstance(sz, int) and sz >= 0:
-                return sz
-        except Exception:
-            pass
+    sz = _call_attr(node, "getSize", None)
+    if isinstance(sz, int) and sz >= 0:
+        return sz
     return 0
 
 
 def _get_node_name(node):
-    if not node or not hasattr(node, "getName"):
-        return ""
-    try:
-        attr = getattr(node, "getName")
-        res = attr() if callable(attr) else attr
-        return str(res) if res is not None else ""
-    except Exception:
-        return ""
+    res = _call_attr(node, "getName", "")
+    return str(res) if res is not None else ""
 
 
 def _get_node_handle(node):
-    if not node or not hasattr(node, "getHandle"):
-        return None
-    try:
-        attr = getattr(node, "getHandle")
-        return attr() if callable(attr) else attr
-    except Exception:
-        return None
+    return _call_attr(node, "getHandle", None)
 
 
 def _is_node_folder(node):
-    if not node or not hasattr(node, "isFolder"):
-        return False
-    try:
-        attr = getattr(node, "isFolder")
-        return bool(attr() if callable(attr) else attr)
-    except Exception:
-        return False
+    return bool(_call_attr(node, "isFolder", False))
 
 
 class AsyncMega:
@@ -319,10 +307,11 @@ class AsyncMega:
         try:
             children = await sync_to_async(self.api.getChildren, parent)
             if children:
-                for i in range(children.size()):
-                    child = children.get(i)
+                sz = _call_attr(children, "size", 0)
+                for i in range(sz):
+                    child = _call_attr(children, "get", None, i)
                     try:
-                        if child.getName() == name:
+                        if _get_node_name(child) == name:
                             return child
                     except Exception:
                         pass
@@ -630,27 +619,28 @@ class MegaAppListener(MegaListener):
             try:
                 expected = getattr(self, "_target_name", None)
                 if expected is not None:
-                    tf_name = transfer.getFileName()
+                    tf_name = _call_attr(transfer, "getFileName", "")
                     if tf_name == expected or (isinstance(tf_name, str) and tf_name.endswith(expected)):
                         return True
-                return transfer.getType() == getattr(MegaTransfer, "TYPE_UPLOAD", 1)
+                tf_type = _call_attr(transfer, "getType", None)
+                return tf_type == getattr(MegaTransfer, "TYPE_UPLOAD", 1)
             except Exception:
                 return False
         if self._async_api._download_is_folder:
             try:
-                return transfer.isFolderTransfer()
+                return bool(_call_attr(transfer, "isFolderTransfer", False))
             except Exception:
                 return False
         target_match = False
         if self._target_handle is not None:
             try:
-                if transfer.getNodeHandle() == self._target_handle:
+                if _call_attr(transfer, "getNodeHandle", None) == self._target_handle:
                     target_match = True
             except Exception:
                 pass
         if not target_match:
             try:
-                if transfer.getFileName() == self._name:
+                if _call_attr(transfer, "getFileName", "") == self._name:
                     target_match = True
             except Exception:
                 pass
@@ -658,8 +648,9 @@ class MegaAppListener(MegaListener):
 
     def onRequestFinish(self, api, request, error, source="main"):
         try:
-            request_type = request.getType()
-            err_code = error.getErrorCode() if error else MegaError.API_OK
+            request_type = _call_attr(request, "getType", None)
+            err_code = _call_attr(error, "getErrorCode", MegaError.API_OK) if error else MegaError.API_OK
+            err_str = _call_attr(error, "toString", "") if error else ""
             if err_code != MegaError.API_OK:
                 if self.is_cancelled:
                     self._set_request_event()
@@ -672,7 +663,7 @@ class MegaAppListener(MegaListener):
                     and self._is_expected_source(source)
                 ):
                     return
-                self.error = f"{err_code} {error.toString()}"
+                self.error = f"{err_code} {err_str}"
                 LOGGER.error(f"Mega onRequestFinishError: {self.error}")
                 self._set_request_event()
                 self._set_transfer_event()
@@ -691,7 +682,7 @@ class MegaAppListener(MegaListener):
             )
             if request_type == MegaRequest.TYPE_GET_PUBLIC_NODE:
                 try:
-                    self.public_node = request.getPublicMegaNode()
+                    self.public_node = _call_attr(request, "getPublicMegaNode", None)
                 except Exception:
                     self.public_node = None
                 if self.public_node:
@@ -718,13 +709,13 @@ class MegaAppListener(MegaListener):
                     self._size = _get_node_size(self.node, api)
             elif request_type == MegaRequest.TYPE_EXPORT:
                 try:
-                    self._export_link = request.getLink()
+                    self._export_link = _call_attr(request, "getLink", None)
                 except Exception:
                     pass
                 self._set_export_done()
             elif request_type == MegaRequest.TYPE_CREATE_FOLDER:
                 try:
-                    handle = request.getNodeHandle()
+                    handle = _call_attr(request, "getNodeHandle", None)
                     node = api.getNodeByHandle(handle) if handle else None
                     if node:
                         self._created_folder_node = node
@@ -738,7 +729,7 @@ class MegaAppListener(MegaListener):
                     pass
             elif request_type == MegaRequest.TYPE_IMPORT_LINK:
                 try:
-                    handle = request.getNodeHandle()
+                    handle = _call_attr(request, "getNodeHandle", None)
                     node = api.getNodeByHandle(handle) if handle else None
                     if node:
                         name = _get_node_name(node)
@@ -780,7 +771,7 @@ class MegaAppListener(MegaListener):
         try:
             if not self._is_target_transfer(transfer):
                 return
-            LOGGER.info("Mega: onTransferStart TARGET name=%s", transfer.getFileName())
+            LOGGER.info("Mega: onTransferStart TARGET name=%s", _call_attr(transfer, "getFileName", ""))
             self._current_transfer = transfer
             self._bytes_transferred = 0
             self._set_request_event()
@@ -803,14 +794,14 @@ class MegaAppListener(MegaListener):
                 except Exception:
                     pass
                 return
-            self._speed = transfer.getSpeed()
+            self._speed = _call_attr(transfer, "getSpeed", 0)
             alpha = 0.3
             self._smoothed_speed = (
                 alpha * self._speed + (1 - alpha) * self._smoothed_speed
             )
             self._last_speed_time = time()
-            self._bytes_transferred = transfer.getTransferredBytes()
-            total = transfer.getTotalBytes()
+            self._bytes_transferred = _call_attr(transfer, "getTransferredBytes", 0)
+            total = _call_attr(transfer, "getTotalBytes", 0)
             if total > self._total_folder_size:
                 self._total_folder_size = total
         except Exception as e:
@@ -818,7 +809,8 @@ class MegaAppListener(MegaListener):
 
     def onTransferFinish(self, api: MegaApi, transfer: MegaTransfer, error):
         try:
-            err_code = error.getErrorCode() if error else MegaError.API_OK
+            err_code = _call_attr(error, "getErrorCode", MegaError.API_OK) if error else MegaError.API_OK
+            err_str = _call_attr(error, "toString", "") if error else ""
             if self.is_cancelled:
                 self._set_transfer_event()
                 return
@@ -827,7 +819,7 @@ class MegaAppListener(MegaListener):
                 return
             LOGGER.info("Mega: onTransferFinish TARGET err=%s", err_code)
             if err_code != MegaError.API_OK:
-                self.error = f"{err_code} {error.toString()}"
+                self.error = f"{err_code} {err_str}"
                 if err_code == MegaError.API_EINCOMPLETE:
                     self.retryable_error = self.error
                     LOGGER.warning("Mega transfer incomplete (API_EINCOMPLETE): %s", self.error)
@@ -846,15 +838,16 @@ class MegaAppListener(MegaListener):
                 async_to_sync(self.listener.on_download_complete)
             else:
                 try:
-                    self._uploaded_node_handle = transfer.getNodeHandle()
+                    self._uploaded_node_handle = _call_attr(transfer, "getNodeHandle", None)
                 except Exception as e:
                     LOGGER.warning(f"onTransferFinish: getNodeHandle failed: {e}")
                 if self._upload_mode and self._bytes_transferred == 0 and self._size:
                     self._bytes_transferred = self._size
                     self._last_speed_time = time()
+                tf_type = _call_attr(transfer, "getType", None)
                 if (
                     self._upload_mode
-                    and transfer.getType() == MegaTransfer.TYPE_UPLOAD
+                    and tf_type == getattr(MegaTransfer, "TYPE_UPLOAD", 1)
                     and not self._suppress_export
                 ):
                     self._clear_export_done()
@@ -864,15 +857,17 @@ class MegaAppListener(MegaListener):
                         if handle:
                             node = api.getNodeByHandle(handle)
                         if not node:
-                            parent = api.getNodeByHandle(transfer.getParentHandle())
+                            parent_handle = _call_attr(transfer, "getParentHandle", None)
+                            parent = api.getNodeByHandle(parent_handle) if parent_handle else None
                             if parent:
-                                name = transfer.getFileName()
-                                children = api.getChildren(parent)
+                                name = _call_attr(transfer, "getFileName", "")
+                                children = _call_attr(api, "getChildren", None, parent)
                                 if children:
-                                    for i in range(children.size()):
-                                        child = children.get(i)
+                                    sz = _call_attr(children, "size", 0)
+                                    for i in range(sz):
+                                        child = _call_attr(children, "get", None, i)
                                         try:
-                                            if child.getName() == name:
+                                            if _get_node_name(child) == name:
                                                 node = child
                                                 break
                                         except Exception:
@@ -1104,8 +1099,9 @@ class MegaFolderListener(MegaListener):
 
     def onRequestFinish(self, api, request, error, source="main"):
         try:
-            request_type = request.getType()
-            err_code = error.getErrorCode() if error else MegaError.API_OK
+            request_type = _call_attr(request, "getType", None)
+            err_code = _call_attr(error, "getErrorCode", MegaError.API_OK) if error else MegaError.API_OK
+            err_str = _call_attr(error, "toString", "") if error else ""
             if err_code != MegaError.API_OK:
                 if self.is_cancelled:
                     self._set_request_event()
@@ -1118,7 +1114,7 @@ class MegaFolderListener(MegaListener):
                     and self._is_expected_source(source)
                 ):
                     return
-                self.error = f"{err_code} {error.toString()}"
+                self.error = f"{err_code} {err_str}"
                 LOGGER.error(f"MegaFolder onRequestFinishError: {self.error}")
                 self._set_request_event()
                 self._set_transfer_event()
@@ -1159,7 +1155,7 @@ class MegaFolderListener(MegaListener):
                     self._cache_node_data(self.node)
                     self._size = _get_node_size(self.node, api)
                     try:
-                        self._children = api.getChildren(self.node)
+                        self._children = _call_attr(api, "getChildren", None, self.node)
                     except Exception:
                         pass
 
@@ -1190,7 +1186,7 @@ class MegaFolderListener(MegaListener):
             if not self._is_target_transfer(transfer):
                 return
             LOGGER.info(
-                "MegaFolder: onTransferStart TARGET name=%s", transfer.getFileName()
+                "MegaFolder: onTransferStart TARGET name=%s", _call_attr(transfer, "getFileName", "")
             )
             self._current_transfer = transfer
             self._bytes_transferred = 0
@@ -1216,14 +1212,14 @@ class MegaFolderListener(MegaListener):
                 except Exception:
                     pass
                 return
-            self._speed = transfer.getSpeed()
+            self._speed = _call_attr(transfer, "getSpeed", 0)
             alpha = 0.3
             self._smoothed_speed = (
                 alpha * self._speed + (1 - alpha) * self._smoothed_speed
             )
             self._last_speed_time = time()
-            self._bytes_transferred = transfer.getTransferredBytes()
-            total = transfer.getTotalBytes()
+            self._bytes_transferred = _call_attr(transfer, "getTransferredBytes", 0)
+            total = _call_attr(transfer, "getTotalBytes", 0)
             if total > self._total_folder_size:
                 self._total_folder_size = total
                 if total > 0 and hasattr(self, "listener"):
@@ -1235,20 +1231,21 @@ class MegaFolderListener(MegaListener):
 
     def onTransferFinish(self, api: MegaApi, transfer: MegaTransfer, error):
         try:
-            err_code = error.getErrorCode() if error else MegaError.API_OK
+            err_code = _call_attr(error, "getErrorCode", MegaError.API_OK) if error else MegaError.API_OK
+            err_str = _call_attr(error, "toString", "") if error else ""
             if self.is_cancelled:
                 self._set_transfer_event()
                 return
 
             if not self._is_target_transfer(transfer):
                 return
-            transferred = transfer.getTransferredBytes()
-            total = transfer.getTotalBytes()
-            speed = transfer.getSpeed()
-            state = transfer.getState()
+            transferred = _call_attr(transfer, "getTransferredBytes", 0)
+            total = _call_attr(transfer, "getTotalBytes", 0)
+            speed = _call_attr(transfer, "getSpeed", 0)
+            state = _call_attr(transfer, "getState", None)
             LOGGER.info("MegaFolder: onTransferFinish TARGET err=%s transferred=%s total=%s speed=%s state=%s", err_code, transferred, total, speed, state)
             if err_code != MegaError.API_OK:
-                self.error = f"{err_code} {error.toString()}"
+                self.error = f"{err_code} {err_str}"
                 if err_code == MegaError.API_EINCOMPLETE:
                     self.retryable_error = self.error
                     LOGGER.warning("MegaFolder transfer incomplete (API_EINCOMPLETE): %s", self.error)

@@ -24,6 +24,8 @@ from ...ext_utils.files_utils import clean_download
 from ...listeners.mega_listener import (
     AsyncMega,
     MegaAppListener,
+    _call_attr,
+    _get_node_name,
     _mega_error_format,
     _MEGA_SDK_LOCK,
 )
@@ -43,12 +45,13 @@ def _make_cancel_token():
 
 def _find_node_by_name(api, parent_node, name):
     try:
-        children = api.getChildren(parent_node)
+        children = _call_attr(api, "getChildren", None, parent_node)
         if children:
-            for i in range(children.size()):
-                child = children.get(i)
+            sz = _call_attr(children, "size", 0)
+            for i in range(sz):
+                child = _call_attr(children, "get", None, i)
                 try:
-                    if child.getName() == name:
+                    if _get_node_name(child) == name:
                         return child
                 except Exception:
                     pass
