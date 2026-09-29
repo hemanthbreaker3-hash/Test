@@ -3,13 +3,7 @@ from asyncio import sleep as asleep
 from secrets import token_hex
 
 from aiofiles.os import makedirs
-try:
-    from mega import MegaApi
-except (ImportError, SyntaxError, Exception):
-    try:
-        from megasdk import MegaApi
-    except (ImportError, SyntaxError, Exception):
-        MegaApi = None
+from mega import MegaApi
 
 from .... import LOGGER, task_dict, task_dict_lock
 from ...telegram_helper.message_utils import update_status_message
@@ -23,10 +17,6 @@ from ...mirror_leech_utils.status_utils.mega_status import MegaDownloadStatus
 
 
 async def add_mega_clone(listener, link, mega_email, mega_password, gid):
-    if MegaApi is None:
-        await listener.on_upload_error("MegaSDK not installed or failed to load.")
-        return None, 0, 0
-
     if not mega_email or not mega_password:
         await listener.on_upload_error("Mega credentials not configured for this user.")
         return None, 0, 0
@@ -41,7 +31,7 @@ async def add_mega_clone(listener, link, mega_email, mega_password, gid):
     await makedirs(mega_dir, exist_ok=True)
 
     async_api = AsyncMega()
-    async_api.api = api = MegaApi("", mega_dir, "HTR-X", 4)
+    async_api.api = api = MegaApi("", mega_dir, "WZML-X", 4)
     await asleep(0.1)
     mega_listener = MegaAppListener(async_api, listener)
     async_api._mega_listener = mega_listener
@@ -115,7 +105,6 @@ async def add_mega_clone(listener, link, mega_email, mega_password, gid):
             except Exception:
                 pass
             try:
-                if async_api.api is not None and async_api._mega_listener is not None:
-                    async_api.api.removeListener(async_api._mega_listener)
+                api.removeListener(mega_listener)
             except Exception:
                 pass

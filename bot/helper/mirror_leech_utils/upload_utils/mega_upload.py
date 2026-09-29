@@ -10,13 +10,7 @@ from mimetypes import guess_type
 from secrets import token_hex
 
 from aiofiles.os import makedirs, path as aiopath
-try:
-    from mega import MegaApi, MegaCancelToken
-except (ImportError, SyntaxError, Exception):
-    try:
-        from megasdk import MegaApi, MegaCancelToken
-    except (ImportError, SyntaxError, Exception):
-        MegaApi = MegaCancelToken = None
+from mega import MegaApi, MegaCancelToken
 
 from .... import LOGGER, task_dict, task_dict_lock
 from ...ext_utils.bot_utils import sync_to_async
@@ -24,8 +18,6 @@ from ...ext_utils.files_utils import clean_download
 from ...listeners.mega_listener import (
     AsyncMega,
     MegaAppListener,
-    _call_attr,
-    _get_node_name,
     _mega_error_format,
     _MEGA_SDK_LOCK,
 )
@@ -45,13 +37,12 @@ def _make_cancel_token():
 
 def _find_node_by_name(api, parent_node, name):
     try:
-        children = _call_attr(api, "getChildren", None, parent_node)
+        children = api.getChildren(parent_node)
         if children:
-            sz = _call_attr(children, "size", 0)
-            for i in range(sz):
-                child = _call_attr(children, "get", None, i)
+            for i in range(children.size()):
+                child = children.get(i)
                 try:
-                    if _get_node_name(child) == name:
+                    if child.getName() == name:
                         return child
                 except Exception:
                     pass
@@ -158,10 +149,6 @@ async def _upload_file(
 
 
 async def add_mega_upload(listener, path, mega_email, mega_password, gid):
-    if MegaApi is None:
-        await listener.on_upload_error("MegaSDK not installed or failed to load.")
-        return
-
     if not mega_email or not mega_password:
         await listener.on_upload_error("Mega credentials not configured for this user.")
         return
@@ -173,7 +160,7 @@ async def add_mega_upload(listener, path, mega_email, mega_password, gid):
     await makedirs(mega_dir, exist_ok=True)
 
     async_api = AsyncMega()
-    async_api.api = api = MegaApi("", mega_dir, "HTR-X", 4)
+    async_api.api = api = MegaApi("", mega_dir, "WZML-X", 4)
     await asleep(0.1)
     mega_listener = MegaAppListener(async_api, listener)
     mega_listener._upload_mode = True
@@ -264,8 +251,6 @@ async def add_mega_upload(listener, path, mega_email, mega_password, gid):
                     )
                     if ok:
                         uploaded_files += 1
-                        mega_listener._total_downloaded_bytes += mega_listener._size
-                        mega_listener._bytes_transferred = 0
                     else:
                         if not listener.is_cancelled and not mega_listener.is_cancelled:
                             await listener.on_upload_error(f"MegaUpload failed for {f}")

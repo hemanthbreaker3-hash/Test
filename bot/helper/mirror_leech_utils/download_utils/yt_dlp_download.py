@@ -20,23 +20,12 @@ from ..status_utils.yt_dlp_status import YtDlpStatus
 LOGGER = getLogger(__name__)
 
 
-def get_cookie_file(user_dict, user_id=None):
-    use_default = user_dict.get("USE_DEFAULT_COOKIE", False)
-    if use_default:
-        if ospath.exists("cookies.txt"):
-            return "cookies.txt", None
-        if ospath.exists("cookies/cookies.txt"):
-            return "cookies/cookies.txt", None
-        return None, "Owner cookie file not found / configured!"
-    else:
+def get_cookie_file(user_dict):
+    if not user_dict.get("USE_DEFAULT_COOKIE", False):
         usr_cookie = user_dict.get("USER_COOKIE_FILE", "")
         if usr_cookie and ospath.exists(usr_cookie):
-            return usr_cookie, None
-        if user_id:
-            uid_cookie = f"cookies/{user_id}/cookies.txt"
-            if ospath.exists(uid_cookie):
-                return uid_cookie, None
-        return None, "User cookie file not found / configured!"
+            return usr_cookie
+    return "cookies.txt"
 
 
 class MyLogger:
@@ -98,16 +87,12 @@ class YoutubeDLHelper:
                 "file_access": lambda n: 3,
                 "extractor": lambda n: 3,
             },
-            "concurrent_fragment_downloads": 3,
         }
-        cookie_to_use, err = get_cookie_file(self._listener.user_dict, self._listener.user_id)
-        if cookie_to_use and ospath.exists(cookie_to_use):
-            self.opts["cookiefile"] = cookie_to_use
-            LOGGER.info(
-                f"Using cookies.txt file: {cookie_to_use} | User ID : {self._listener.user_id}"
-            )
-        else:
-            self.opts.pop("cookiefile", None)
+        cookie_to_use = get_cookie_file(self._listener.user_dict)
+        self.opts["cookiefile"] = cookie_to_use
+        LOGGER.info(
+            f"Using cookies.txt file: {cookie_to_use} | User ID : {self._listener.user_id}"
+        )
 
     @property
     def download_speed(self):
@@ -167,11 +152,7 @@ class YoutubeDLHelper:
         async_to_sync(self._listener.on_download_error, error)
 
     def _extract_meta_data(self):
-        opts = self.opts.copy()
-        if self.is_playlist:
-            opts["extract_flat"] = "in_playlist"
-            opts["ignoreerrors"] = True
-        with YoutubeDL(opts) as ydl:
+        with YoutubeDL(self.opts) as ydl:
             try:
                 result = ydl.extract_info(self._listener.link, download=False)
                 if result is None:
@@ -231,11 +212,6 @@ class YoutubeDLHelper:
         return
 
     async def add_download(self, path, qual, playlist, options):
-        cookie_to_use, err = get_cookie_file(self._listener.user_dict, self._listener.user_id)
-        if err and not cookie_to_use:
-            await self._listener.on_download_error(err)
-            return
-
         if playlist:
             self.opts["ignoreerrors"] = True
             self.is_playlist = True
@@ -401,11 +377,6 @@ class YoutubeDLHelper:
             elif key == "download_ranges":
                 if isinstance(value, list):
                     self.opts[key] = lambda info, ytdl: value
-            elif key == "cookiefile":
-                if value and ospath.exists(str(value)):
-                    self.opts[key] = str(value)
-                else:
-                    self.opts.pop("cookiefile", None)
             else:
                 if key == "writethumbnail" and value is True:
                     self.keep_thumb = True
